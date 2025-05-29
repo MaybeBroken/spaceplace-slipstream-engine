@@ -1,17 +1,29 @@
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
-from panda3d.core import loadPrcFileData
 from screeninfo import get_monitors
+import mouse
+import sys
+import os
+from panda3d.core import loadPrcFileData
+import direct.stdpy.threading as threading
 
-monitors = get_monitors()
-if monitors:
-    screen_x = monitors[0].width
-    screen_y = monitors[0].height
-else:
-    screen_x = 800
-    screen_y = 600
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-loadPrcFileData("", f"win-size {screen_x} {screen_y}")
+
+def get_current_monitor():
+    x, y = mouse.get_position()
+    for idx, m in enumerate(get_monitors()):
+        if m.x <= x < m.x + m.width and m.y <= y < m.y + m.height:
+            return idx
+    return 0  # Default to primary if not found
+
+
+monitor = get_monitors()[get_current_monitor()]
+monitor_width = monitor.width
+monitor_height = monitor.height
+aspect_ratio = monitor_width / monitor_height
+
+loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
 loadPrcFileData("", "window-title Slipstream Server")
 loadPrcFileData("", "undecorated true")
 
@@ -30,4 +42,5 @@ class serverProgram(ShowBase):
 
 if __name__ == "__main__":
     app = serverProgram()
+
     app.run()

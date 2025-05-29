@@ -4,7 +4,7 @@ from direct.gui.DirectGui import *
 from panda3d.core import *
 from panda3d.core import loadPrcFileData
 import os
-import threading
+import direct.stdpy.threading as threading
 
 loadPrcFileData("", "win-size 350 150")
 loadPrcFileData("", "window-title Slipstream Launcher")
