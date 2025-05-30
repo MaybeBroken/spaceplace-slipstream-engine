@@ -59,13 +59,43 @@ class clientProgram(ShowBase):
             relief=DGG.FLAT,
         )
         self.serverButtonsOffset = 0
+        self.serverButtons = []
 
     def launch(self, serverName):
         threading.Thread(target=start_client, args=(serverName,), daemon=True).start()
+        self.serverListHeading.destroy()
+        self.serverListPanel.destroy()
+        [button.destroy() for button in self.serverButtons]
+        self.taskMgr.add(self.server_loop, "server_loop")
+        send_message(
+            "CLIENT_INIT",
+        )
 
     def quit(self):
         print("Exiting client program...")
         self.userExit()
+
+    def server_loop(self, task):
+        for message in iter_messages():
+            if message == "BUILD_WORLD":
+                self.build_world()
+            elif message == "QUIT":
+                self.quit()
+            else:
+                print(f"Received unknown message: {message}")
+        return task.cont
+
+    def build_world(self):
+        # Placeholder for world-building logic
+        print("Building world... (not implemented)")
+        alert = OnscreenText(
+            parent=self.aspect2d,
+            text="Loading...",
+            pos=(0, 0),
+            scale=0.2,
+            fg=(1, 0, 0, 1),
+            align=TextNode.ACenter,
+        )
 
 
 if __name__ == "__main__":
@@ -73,13 +103,16 @@ if __name__ == "__main__":
     clients = search_clients(7050)
     for cli in clients:
         print(f"Found client: {cli}")
-        DirectButton(
-            parent=app.aspect2d,
-            text=cli,
-            scale=0.1,
-            text_scale=0.5,
-            command=lambda uri=cli: start_client(uri),
-            pos=(-0.5 * aspect_ratio, 0, (-app.serverButtonsOffset) + 0.4),
+        app.serverButtons.append(
+            DirectButton(
+                parent=app.aspect2d,
+                text=cli,
+                scale=0.1,
+                text_scale=0.5,
+                command=app.launch,
+                extraArgs=[cli],
+                pos=(-0.5 * aspect_ratio, 0, (-app.serverButtonsOffset) + 0.4),
+            )
         )
         app.serverButtonsOffset += 0.2
 

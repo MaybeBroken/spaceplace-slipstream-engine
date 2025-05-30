@@ -6,6 +6,11 @@ import sys
 import os
 from panda3d.core import loadPrcFileData
 import direct.stdpy.threading as threading
+from socketServer import (
+    send_message,
+    iter_messages,
+    launch_server,
+)
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,9 +28,8 @@ monitor_width = monitor.width
 monitor_height = monitor.height
 aspect_ratio = monitor_width / monitor_height
 
-loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
+loadPrcFileData("", "win-size 800 600")
 loadPrcFileData("", "window-title Slipstream Server")
-loadPrcFileData("", "undecorated true")
 
 
 class serverProgram(ShowBase):
@@ -34,6 +38,15 @@ class serverProgram(ShowBase):
         self.setBackgroundColor(0, 0, 0)
         self.disableMouse()
         self.accept("q", self.quit)
+        self.taskMgr.add(self.client_loop, "client_loop")
+
+    def client_loop(self, task):
+        for message in iter_messages():
+            if message == "CLIENT_INIT":
+                send_message("BUILD_WORLD")
+            else:
+                print(f"Received unknown message: {message}")
+        return task.cont
 
     def quit(self):
         print("Exiting server program...")
@@ -42,5 +55,5 @@ class serverProgram(ShowBase):
 
 if __name__ == "__main__":
     app = serverProgram()
-
+    launch_server("localhost", 7050)
     app.run()

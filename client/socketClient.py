@@ -4,19 +4,26 @@ import socket
 import subprocess
 import re
 import direct.stdpy.threading as threading
+import json
 
 outbound = []
 incoming = []
 
 
 def send_message(message):
+    try:
+        message = json.dumps(message)
+    except Exception as e:
+        raise ValueError("Message must be a JSON encodable object") from e
     outbound.append(message)
 
 
 def iter_messages():
     val = incoming.copy()
     incoming.clear()
-    return iter(val)
+    if not val:
+        return []
+    return [json.loads(id) for id in val]
 
 
 def _connect_to_server(uri):
@@ -24,21 +31,18 @@ def _connect_to_server(uri):
         async with ws.connect(uri) as websocket:
             print(f"Connected to server at {uri}")
             while True:
-                if outbound:
-                    message = outbound.pop(0)
-                    await websocket.send(message)
-                    print(f"Sent: {message}")
-
                 try:
+                    for message in outbound:
+                        print(f"Sending message: {message}")
+                        await websocket.send(message)
+                        print(f"Sent message: {message}")
+                        outbound.remove(message)
                     response = await websocket.recv()
                     incoming.append(response)
-                    print(f"Received: {response}")
-                except ws.ConnectionClosed:
-                    print("Connection closed")
-                    break
+                    print(f"Received message: {response}")
                 except Exception as e:
                     print(f"Error processing data: {e}")
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.5)
 
     asyncio.run(connect())
 

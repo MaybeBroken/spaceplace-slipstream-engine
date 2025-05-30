@@ -2,21 +2,28 @@ import direct.stdpy.threading as threading
 from time import sleep
 import websockets as ws
 import asyncio
+import json
 
 inbound = []
 outbound = []
 clients = set()
 
 
-def broadcast(message):
-    for client in clients:
-        asyncio.create_task(client.send(message))
+def send_message(message):
+    try:
+        message = json.dumps(message)
+    except Exception as e:
+        raise ValueError("Message must be a JSON encodable object") from e
+    print(f"Added message to outbound queue: {message}")
+    outbound.append(message)
 
 
 def iter_messages():
     val = inbound.copy()
     inbound.clear()
-    return iter(val)
+    if not val:
+        return []
+    return [json.loads(id) for id in val]
 
 
 def register_client(client):
@@ -35,11 +42,18 @@ async def handle_client(websocket):
         try:
             message = await websocket.recv()
             inbound.append(message)
+            print(f"Received message from {websocket.remote_address}: {message}")
+            for message in outbound:
+                print(f"Sending message to {websocket.remote_address}: {message}")
+                await websocket.send(message)
+                print(f"Sent message to {websocket.remote_address}: {message}")
+            outbound.clear()
         except ws.ConnectionClosed:
-            pass
+            print(f"Connection closed by client {websocket.remote_address}")
+            unregister_client(websocket)
+            break
         except Exception as e:
             print(f"Error handling client {websocket.remote_address}: {e}")
-        finally:
             unregister_client(websocket)
             break
 
