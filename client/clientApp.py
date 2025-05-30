@@ -32,7 +32,9 @@ monitor_width = monitor.width
 monitor_height = monitor.height
 aspect_ratio = monitor_width / monitor_height
 
-loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
+loadPrcFileData(
+    "", "win-size " + str(monitor_width // 2) + " " + str(monitor_height // 2)
+)
 loadPrcFileData("", "window-title Slipstream Client")
 loadPrcFileData("", "undecorated true")
 
@@ -70,6 +72,14 @@ class clientProgram(ShowBase):
         send_message(
             "CLIENT_INIT",
         )
+        self.alert = OnscreenText(
+            parent=self.aspect2d,
+            text="Loading...",
+            pos=(0, 0),
+            scale=0.2,
+            fg=(1, 1, 1, 1),
+            align=TextNode.ACenter,
+        )
 
     def quit(self):
         print("Exiting client program...")
@@ -88,14 +98,7 @@ class clientProgram(ShowBase):
     def build_world(self):
         # Placeholder for world-building logic
         print("Building world... (not implemented)")
-        alert = OnscreenText(
-            parent=self.aspect2d,
-            text="Loading...",
-            pos=(0, 0),
-            scale=0.2,
-            fg=(1, 0, 0, 1),
-            align=TextNode.ACenter,
-        )
+        self.alert.setText("Building world...")
 
 
 if __name__ == "__main__":

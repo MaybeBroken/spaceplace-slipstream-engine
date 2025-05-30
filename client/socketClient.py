@@ -30,19 +30,43 @@ def _connect_to_server(uri):
     async def connect():
         async with ws.connect(uri) as websocket:
             print(f"Connected to server at {uri}")
-            while True:
-                try:
-                    for message in outbound:
-                        print(f"Sending message: {message}")
-                        await websocket.send(message)
-                        print(f"Sent message: {message}")
-                        outbound.remove(message)
-                    response = await websocket.recv()
-                    incoming.append(response)
-                    print(f"Received message: {response}")
-                except Exception as e:
-                    print(f"Error processing data: {e}")
-                    await asyncio.sleep(0.5)
+
+            async def read_incoming():
+                while True:
+                    try:
+                        message = await websocket.recv()
+                        if message:
+                            incoming.append(message)
+                            print(f"Received message: {message}")
+                    except ws.ConnectionClosed:
+                        print("Connection closed")
+                        break
+                    except Exception as e:
+                        print(f"Error receiving message: {e}")
+                        break
+
+            async def send_outbound():
+                while True:
+                    try:
+                        if outbound:
+                            message = outbound.pop(0)
+                            await websocket.send(message)
+                            print(f"Sent message: {message}")
+                        else:
+                            await asyncio.sleep(0.1)  # <-- Add this line
+                    except ws.ConnectionClosed:
+                        print("Connection closed while sending")
+                        break
+                    except Exception as e:
+                        print(f"Error sending message: {e}")
+                        break
+
+            print("Starting read Thread")
+            asyncio.create_task(read_incoming())
+            print("Starting send Thread")
+            asyncio.create_task(send_outbound())
+            print("Connection established, waiting for messages...")
+            await asyncio.Future()  # Keep the connection open
 
     asyncio.run(connect())
 

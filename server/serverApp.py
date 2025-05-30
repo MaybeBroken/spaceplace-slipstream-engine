@@ -1,3 +1,4 @@
+from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
 from screeninfo import get_monitors
@@ -41,9 +42,11 @@ class serverProgram(ShowBase):
         self.taskMgr.add(self.client_loop, "client_loop")
 
     def client_loop(self, task):
-        for message in iter_messages():
+        for entry in iter_messages():
+            wsock, message = entry if isinstance(entry, tuple) else (None, entry)
             if message == "CLIENT_INIT":
-                send_message("BUILD_WORLD")
+                sleep(0.1)
+                send_message("BUILD_WORLD", target_client=wsock)
             else:
                 print(f"Received unknown message: {message}")
         return task.cont
