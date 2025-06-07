@@ -32,46 +32,46 @@ class Connection:
     async def connect(self, GRAPHQL_URL):
         await ping_url(GRAPHQL_URL)
         transport = AIOHTTPTransport(url=GRAPHQL_URL)
-        async with Client(
+        self.session = Client(
             transport=transport,
             fetch_schema_from_transport=True,
-        ) as self.session:
+        )
 
-            registerClient = gql(
-                """
+        registerClient = gql(
+            """
                 mutation RegisterClient {
     clientConnect(client: "Slipstream Engine", mobile: true, cards: ["Slipstream Core"])
     }
             """
-            )
+        )
 
-            result = await self.session.execute(registerClient)
+        result = await self.session.execute_async(registerClient)
 
-            getSimulatorId = gql(
-                """query SimulatorId {
+        getSimulatorId = gql(
+            """query SimulatorId {
     clients(clientId:"Slipstream Engine") {
         simulator {
         id
         }
     }
 }"""
-            )
+        )
 
-            result = await self.session.execute(getSimulatorId)
-            self.simulatorId = result["clients"][0]["simulator"]["id"]
-            print(f"Simulator ID: {self.simulatorId}")
+        result = await self.session.execute_async(getSimulatorId)
+        self.simulatorId = result["clients"][0]["simulator"]["id"]
+        print(f"Simulator ID: {self.simulatorId}")
 
-            getThrustersId = gql(
-                f"""query GetThrusterId {{
+        getThrustersId = gql(
+            f"""query GetThrusterId {{
     thrusters(simulatorId:"{self.simulatorId}") {{
         id
     }}
 }}"""
-            )
+        )
 
-            result = await self.session.execute(getThrustersId)
-            self.thrusterIds = [thruster["id"] for thruster in result["thrusters"]]
-            print(f"Thruster IDs: {self.thrusterIds}")
+        result = await self.session.execute_async(getThrustersId)
+        self.thrusterIds = [thruster["id"] for thruster in result["thrusters"]]
+        print(f"Thruster IDs: {self.thrusterIds}")
 
     async def set_thruster_direction(self, pitch, roll, yaw):
         setThrusterDirection = gql(
@@ -83,10 +83,7 @@ class Connection:
     }})
 }}"""
         )
-
-        await self.session.execute(
-            setThrusterDirection,
-        )
+        result = await self.session.execute_async(setThrusterDirection)
 
     async def get_thruster_info(self):
         getThrusterInfo = gql(
@@ -127,9 +124,14 @@ class Connection:
             """
         )
 
-        result = await self.session.execute(getThrusterInfo)
+        result = await self.session.execute_async(getThrusterInfo)
         return result["thruster"]
 
 
 if __name__ == "__main__":
-    Connection()
+    conn = Connection()
+    rot = (0, 0, 0)
+    while True:
+        sleep(1 / 60)
+        rot = tuple(map(lambda x: x + 1, rot))
+        asyncio.run(conn.set_thruster_direction(*rot))
