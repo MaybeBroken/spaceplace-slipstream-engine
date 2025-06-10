@@ -1,0 +1,7 @@
+{
+    "removeList": [
+        "main.py",
+        "client/",
+        "server/"
+    ]
+}

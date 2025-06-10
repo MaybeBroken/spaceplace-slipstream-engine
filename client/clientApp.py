@@ -5,7 +5,7 @@ from direct.gui.DirectGui import *
 import mouse
 import sys
 import os
-from panda3d.core import loadPrcFileData, TextNode
+from panda3d.core import loadPrcFileData, TextNode, AntialiasAttrib
 import direct.stdpy.threading as threading
 
 # local imports
@@ -24,7 +24,7 @@ def get_current_monitor():
     for idx, m in enumerate(get_monitors()):
         if m.x <= x < m.x + m.width and m.y <= y < m.y + m.height:
             return idx
-    return 0  # Default to primary if not found
+    return 0
 
 
 monitor = get_monitors()[get_current_monitor()]
@@ -32,17 +32,19 @@ monitor_width = monitor.width
 monitor_height = monitor.height
 aspect_ratio = monitor_width / monitor_height
 
-loadPrcFileData(
-    "", "win-size " + str(monitor_width // 2) + " " + str(monitor_height // 2)
-)
+loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
 loadPrcFileData("", "window-title Slipstream Client")
 loadPrcFileData("", "undecorated true")
+loadPrcFileData("", "show-frame-rate-meter true")
+loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
+loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
 
 
 class clientProgram(ShowBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setBackgroundColor(0, 0, 0)
+        self.render.set_antialias(AntialiasAttrib.MAuto)
         self.disableMouse()
         self.accept("q", self.quit)
         self.serverListHeading = OnscreenText(
