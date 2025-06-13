@@ -1,4 +1,5 @@
 from json import dumps, loads
+from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
 from screeninfo import get_monitors
@@ -12,6 +13,7 @@ from panda3d.core import (
     AntialiasAttrib,
     TransparencyAttrib,
     WindowProperties,
+    LineSegs,
 )
 import direct.stdpy.threading as threading
 import win32con
@@ -24,7 +26,7 @@ from socketClient import (
     start_client,
     send_message,
     iter_messages,
-    search_clients,
+    search_servers,
 )
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -46,8 +48,8 @@ aspect_ratio = monitor_width / monitor_height
 loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
 loadPrcFileData("", "window-title Slipstream Client")
 loadPrcFileData("", "undecorated true")
-loadPrcFileData("", "show-frame-rate-meter true")
-loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
+# loadPrcFileData("", "show-frame-rate-meter true")
+# loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
 loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
 loadPrcFileData("", "background-color 0 0 0 0")
 loadPrcFileData("", "active-display-region true")
@@ -149,18 +151,56 @@ class clientProgram(ShowBase):
         for message in iter_messages():
             if message.startswith("CLIENT_CONFIG"):
                 self.runConfig(message.split("||+")[1])
-            if message == "BUILD_WORLD":
+            elif message == "BUILD_WORLD":
                 self.build_world()
+            elif message == "START_SIMULATION":
+                self.start_simulation()
             elif message == "QUIT":
                 self.quit()
             else:
-                print(f"Received unknown message: {message}")
+                print(f"CLIENT: Received unknown message: {message}")
         return task.cont
 
     def build_world(self):
         # Placeholder for world-building logic
-        print("Building world... (not implemented)")
-        self.alert.setText("Building world...")
+        print("CLIENT: Building world... (not implemented)")
+        self.alert.setText("CLIENT: Building world...")
+        self.alert.destroy()
+        self.worldGrid = self.generateGrid(300, 5)
+        self.worldGrid.hide()
+        self.camera.setPos(0, -8, 1)
+        self.camera.lookAt(0, 0, 0.5)
+        send_message("CLIENT_READY")
+
+    def start_simulation(self):
+        self.worldGrid.show()
+
+    def generateGrid(self, grid_size=100, spacing=10):
+        self.gridNode = self.render.attachNewNode("gridNode")
+
+        # Draw grid lines
+        for x in range(-grid_size, grid_size + 1):
+            line = LineSegs()
+            line.setThickness(1.0)
+            line.setColor(1, 1, 1, 1)  # White color
+            # Horizontal line
+            line.moveTo(x * spacing, -grid_size * spacing, 0)
+            line.drawTo(x * spacing, grid_size * spacing, 0)
+            node = line.create()
+            self.gridNode.attachNewNode(node)
+
+        for y in range(-grid_size, grid_size + 1):
+            line = LineSegs()
+            line.setThickness(1.0)
+            line.setColor(1, 1, 1, 1)  # White color
+            # Vertical line
+            line.moveTo(-grid_size * spacing, y * spacing, 0)
+            line.drawTo(grid_size * spacing, y * spacing, 0)
+            node = line.create()
+            self.gridNode.attachNewNode(node)
+
+        self.gridNode.setTransparency(TransparencyAttrib.MAlpha)
+        return self.gridNode
 
     def runConfig(self, config):
         monitor_count = len(get_monitors())
@@ -190,17 +230,20 @@ class clientProgram(ShowBase):
 
 if __name__ == "__main__":
     app = clientProgram()
-    clients = search_clients(7050)
-    for cli in clients:
-        print(f"Found client: {cli}")
+    servers = search_servers(7050)
+    for srv in servers:
+        print(f"CLIENT: Found server: {srv}")
         app.serverButtons.append(
             DirectButton(
                 parent=app.aspect2d,
-                text=cli,
-                scale=0.1,
+                text=srv,
                 text_scale=0.5,
+                text_fg=(1, 1, 1, 1),
+                color=(0.3, 0.3, 0.3, 1),
+                relief=DGG.FLAT,
+                scale=0.1,
                 command=app.launch,
-                extraArgs=[cli],
+                extraArgs=[srv],
                 pos=(0, 0, (-app.serverButtonsOffset) + 0.35),
             )
         )

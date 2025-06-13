@@ -53,12 +53,14 @@ class serverProgram(ShowBase):
                 info_id = message.split("||+")[1]
                 client_info = message.split("||+")[2]
                 self.client_info[info_id] = loads(client_info)
+            elif message == "CLIENT_READY":
+                self.setPreSimulation()
             else:
-                print(f"Received unknown message: {message}")
+                print(f"SERVER: Received unknown message: {message}")
         return task.cont
 
     def quit(self):
-        print("Exiting server program...")
+        print("SERVER: Exiting server program...")
         self.userExit()
 
     def client_config(self, wsock, data, value=True):
@@ -99,9 +101,16 @@ class serverProgram(ShowBase):
             command=self.client_config,
             extraArgs=[wsock, "right"],
         )
+        self.startButton = DirectButton(
+            text="Start Flight",
+            scale=0.1,
+            pos=(0, 0, -0.8),
+            command=lambda: send_message("BUILD_WORLD", target_client=wsock),
+        )
         self.accept("arrow_left", self.client_config, extraArgs=[wsock, "left"])
         self.accept("arrow_right", self.client_config, extraArgs=[wsock, "right"])
         index = -1
+        self.cliMonitorObjects = []
         for screenObj in self.client_info["MONITOR_CONFIG"]:
             index += 0.4
             node = DirectFrame(
@@ -113,11 +122,27 @@ class serverProgram(ShowBase):
                     screenObj["height"] / 2,
                 ),
                 frameColor=(0.3, 0.3, 0.3, 1),
-                pos=(index, 0, 0),
+                pos=(index, 0, 0.5),
                 scale=0.000125,
             )
-        if False:
-            send_message("BUILD_WORLD", target_client=wsock)
+            self.cliMonitorObjects.append(node)
+
+    def setPreSimulation(self):
+        self.clientScreenText.destroy()
+        self.leftButton.destroy()
+        self.rightButton.destroy()
+        self.startButton.destroy()
+        self.accept("arrow_left", lambda: None)
+        self.accept("arrow_right", lambda: None)
+        for monitor in self.cliMonitorObjects:
+            monitor.destroy()
+
+        self.beginSimulationButton = DirectButton(
+            text="Begin Simulation",
+            scale=0.1,
+            pos=(0, 0, -0.8),
+            command=lambda: send_message("START_SIMULATION"),
+        )
 
 
 if __name__ == "__main__":

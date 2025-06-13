@@ -18,14 +18,16 @@ def send_message(message, target_client=None):
         if target_client in clients:
             clients[target_client].put(message)
             print(
-                f"Added message to outbound queue for {target_client.remote_address}: {message}"
+                f"SERVER: Added message to outbound queue for {target_client.remote_address}: {message}"
             )
         else:
-            print(f"Target client not found: {target_client}")
+            print(f"SERVER: Target client not found: {target_client}")
     else:
         for wsock, q in clients.items():
             q.put(message)
-            print(f"Added message to outbound queue for {wsock.remote_address}: {message}")
+            print(
+                f"SERVER: Added message to outbound queue for {wsock.remote_address}: {message}"
+            )
 
 
 def iter_messages():
@@ -39,12 +41,12 @@ def iter_messages():
 
 def register_client(client):
     clients[client] = queue.Queue()
-    print(f"Client registered: {client.remote_address}")
+    print(f"SERVER: Client registered: {client.remote_address}")
 
 
 def unregister_client(client):
     clients.pop(client, None)
-    print(f"Client unregistered: {client.remote_address}")
+    print(f"SERVER: Client unregistered: {client.remote_address}")
 
 
 async def handle_client(websocket):
@@ -57,14 +59,14 @@ async def handle_client(websocket):
                 if message:
                     inbound.append((websocket, message))
                     print(
-                        f"Received message from {websocket.remote_address}: {message}"
+                        f"SERVER: Received message from {websocket.remote_address}: {message}"
                     )
             except ws.ConnectionClosed:
-                print(f"Connection closed by client {websocket.remote_address}")
+                print(f"SERVER: Connection closed by client {websocket.remote_address}")
                 unregister_client(websocket)
                 break
             except Exception as e:
-                print(f"Error handling client {websocket.remote_address}: {e}")
+                print(f"SERVER: Error handling client {websocket.remote_address}: {e}")
                 unregister_client(websocket)
                 break
 
@@ -75,32 +77,38 @@ async def handle_client(websocket):
                 if not q.empty():
                     message = q.get()
                     await websocket.send(message)
-                    print(f"Sent message to {websocket.remote_address}: {message}")
+                    print(
+                        f"SERVER: Sent message to {websocket.remote_address}: {message}"
+                    )
                 else:
                     await asyncio.sleep(0.1)
             except ws.ConnectionClosed:
-                print(f"Connection closed while sending to {websocket.remote_address}")
+                print(
+                    f"SERVER: Connection closed while sending to {websocket.remote_address}"
+                )
                 unregister_client(websocket)
                 break
             except Exception as e:
-                print(f"Error sending message to {websocket.remote_address}: {e}")
+                print(
+                    f"SERVER: Error sending message to {websocket.remote_address}: {e}"
+                )
                 unregister_client(websocket)
                 break
 
     asyncio.create_task(read_incoming())
     asyncio.create_task(send_outbound())
-    print("Connection established, waiting for messages...")
+    print("SERVER: Connection established, waiting for messages...")
     await asyncio.Future()  # Keep the connection open
 
 
 async def main(ip, port):
     server = await ws.serve(handle_client, ip, port)
-    print(f"WebSocket server started on ws://{ip}:{port}")
+    print(f"SERVER: WebSocket server started on ws://{ip}:{port}")
     try:
         await asyncio.Future()  # Run forever
-        print("Server shutting down...")
+        print("SERVER: Server shutting down...")
     except KeyboardInterrupt:
-        print("Server shutting down...")
+        print("SERVER: Server shutting down...")
         server.close()
         await server.wait_closed()
 

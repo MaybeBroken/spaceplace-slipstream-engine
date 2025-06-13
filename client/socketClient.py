@@ -29,7 +29,7 @@ def iter_messages():
 def _connect_to_server(uri):
     async def connect():
         async with ws.connect(uri) as websocket:
-            print(f"Connected to server at {uri}")
+            print(f"CLIENT: Connected to server at {uri}")
 
             async def read_incoming():
                 while True:
@@ -37,12 +37,12 @@ def _connect_to_server(uri):
                         message = await websocket.recv()
                         if message:
                             incoming.append(message)
-                            print(f"Received message: {message}")
+                            print(f"CLIENT: Received message: {message}")
                     except ws.ConnectionClosed:
-                        print("Connection closed")
+                        print("CLIENT: Connection closed")
                         break
                     except Exception as e:
-                        print(f"Error receiving message: {e}")
+                        print(f"CLIENT: Error receiving message: {e}")
                         break
 
             async def send_outbound():
@@ -51,21 +51,21 @@ def _connect_to_server(uri):
                         if outbound:
                             message = outbound.pop(0)
                             await websocket.send(message)
-                            print(f"Sent message: {message}")
+                            print(f"CLIENT: Sent message: {message}")
                         else:
                             await asyncio.sleep(0.1)  # <-- Add this line
                     except ws.ConnectionClosed:
-                        print("Connection closed while sending")
+                        print("CLIENT: Connection closed while sending")
                         break
                     except Exception as e:
-                        print(f"Error sending message: {e}")
+                        print(f"CLIENT: Error sending message: {e}")
                         break
 
-            print("Starting read Thread")
+            print("CLIENT: Starting read Thread")
             asyncio.create_task(read_incoming())
-            print("Starting send Thread")
+            print("CLIENT: Starting send Thread")
             asyncio.create_task(send_outbound())
-            print("Connection established, waiting for messages...")
+            print("CLIENT: Connection established, waiting for messages...")
             await asyncio.Future()  # Keep the connection open
 
     asyncio.run(connect())
@@ -75,11 +75,11 @@ def _check_server(uri):
     async def check():
         try:
             async with ws.connect(uri) as websocket:
-                print(f"Server at {uri} is reachable")
+                print(f"CLIENT: Server at {uri} is reachable")
                 await websocket.close()
                 return True
         except ws.ConnectionClosedError:
-            print(f"Server at {uri} is not reachable")
+            print(f"CLIENT: Server at {uri} is not reachable")
             return False
         except Exception as e:
             return False
@@ -111,7 +111,7 @@ def get_arp_ips():
     return list(arp_ips)
 
 
-def search_clients(port):
+def search_servers(port):
     found = []
     ips = get_arp_ips()
     threads = []
@@ -138,8 +138,8 @@ def search_clients(port):
 
 
 if __name__ == "__main__":
-    print("Searching for clients...")
-    clients = search_clients(7050)
-    for cli in clients:
-        print(f"Found client: {cli}")
-    print("Done, found clients:", clients)
+    print("Searching for servers...")
+    servers = search_servers(7050)
+    for srv in servers:
+        print(f"Found server: {srv}")
+    print("Done, found servers:", servers)
