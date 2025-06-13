@@ -1,3 +1,4 @@
+from json import dumps, loads
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
 from screeninfo import get_monitors
@@ -5,8 +6,18 @@ from direct.gui.DirectGui import *
 import mouse
 import sys
 import os
-from panda3d.core import loadPrcFileData, TextNode, AntialiasAttrib
+from panda3d.core import (
+    loadPrcFileData,
+    TextNode,
+    AntialiasAttrib,
+    TransparencyAttrib,
+    WindowProperties,
+)
 import direct.stdpy.threading as threading
+import win32con
+import win32gui
+import win32api
+from win32controller import win32_WIN_Interface, win32_SYS_Interface
 
 # local imports
 from socketClient import (
@@ -29,7 +40,7 @@ def get_current_monitor():
 
 monitor = get_monitors()[get_current_monitor()]
 monitor_width = monitor.width
-monitor_height = monitor.height
+monitor_height = monitor.height - 49  # Leave some space for the taskbar
 aspect_ratio = monitor_width / monitor_height
 
 loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
@@ -38,6 +49,23 @@ loadPrcFileData("", "undecorated true")
 loadPrcFileData("", "show-frame-rate-meter true")
 loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
 loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
+loadPrcFileData("", "background-color 0 0 0 0")
+loadPrcFileData("", "active-display-region true")
+loadPrcFileData("", "framebuffer-alpha true")
+
+
+def generate_monitor_list():
+    return [
+        {
+            "width": monitor.width,
+            "height": monitor.height,
+            "x": monitor.x,
+            "y": monitor.y,
+            "is_primary": monitor.is_primary,
+            "name": monitor.name,
+        }
+        for monitor in get_monitors()
+    ]
 
 
 class clientProgram(ShowBase):
@@ -45,22 +73,51 @@ class clientProgram(ShowBase):
         super().__init__(*args, **kwargs)
         self.setBackgroundColor(0, 0, 0)
         self.render.set_antialias(AntialiasAttrib.MAuto)
+
+        # Transparency
+        self.render2d.setTransparency(TransparencyAttrib.MAlpha)
+        self.graphicsEngine.renderFrame()
+        # Get Panda3D window handle
+        hwnd = self.win.getWindowHandle().getIntHandle()
+        self.win_interface = win32_WIN_Interface(hwnd)
+        # Set layered style
+        styles = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+        win32gui.SetWindowLong(
+            hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED
+        )
+        # Set per-pixel alpha (0 = fully transparent, 255 = opaque)
+        win32gui.SetLayeredWindowAttributes(
+            hwnd, win32api.RGB(0, 0, 0), 0, win32con.LWA_COLORKEY
+        )
+        # Make window always on top
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE,
+        )
+
+        # End transparency
+
         self.disableMouse()
         self.accept("q", self.quit)
-        self.serverListHeading = OnscreenText(
-            parent=self.aspect2d,
-            text="Available Servers",
-            pos=(-0.5 * aspect_ratio, 0.65),
-            scale=0.1,
-            fg=(1, 1, 1, 1),
-            align=TextNode.ACenter,
-        )
         self.serverListPanel = DirectFrame(
             parent=self.render2d,
             frameColor=(0.1, 0.1, 0.1, 1),
-            frameSize=(-0.25, 0.25, -0.5, 0.5),
-            pos=(-0.5, 0, 0),
+            frameSize=(-0.175, 0.175, -0.5, 0.5),
+            pos=(0, 0, 0),
             relief=DGG.FLAT,
+        )
+        self.serverListHeading = OnscreenText(
+            parent=self.aspect2d,
+            text="Available Servers",
+            pos=(0, 0.45),
+            scale=0.05,
+            fg=(1, 1, 1, 1),
+            align=TextNode.ACenter,
         )
         self.serverButtonsOffset = 0
         self.serverButtons = []
@@ -74,11 +131,12 @@ class clientProgram(ShowBase):
         send_message(
             "CLIENT_INIT",
         )
+        send_message("CLIENT_INFO||+MONITOR_CONFIG||+" + dumps(generate_monitor_list()))
         self.alert = OnscreenText(
             parent=self.aspect2d,
-            text="Loading...",
+            text="Initializing client, please continue on the server side...",
             pos=(0, 0),
-            scale=0.2,
+            scale=0.1,
             fg=(1, 1, 1, 1),
             align=TextNode.ACenter,
         )
@@ -89,6 +147,8 @@ class clientProgram(ShowBase):
 
     def server_loop(self, task):
         for message in iter_messages():
+            if message.startswith("CLIENT_CONFIG"):
+                self.runConfig(message.split("||+")[1])
             if message == "BUILD_WORLD":
                 self.build_world()
             elif message == "QUIT":
@@ -101,6 +161,31 @@ class clientProgram(ShowBase):
         # Placeholder for world-building logic
         print("Building world... (not implemented)")
         self.alert.setText("Building world...")
+
+    def runConfig(self, config):
+        monitor_count = len(get_monitors())
+        if monitor_count == 0:
+            return
+        if "left" in config:
+            curMonitor = self.win_interface.getWindowMonitor()
+            newMonitor = (curMonitor - 1) % monitor_count
+            self.win_interface.setWindowMonitor(newMonitor)
+        elif "right" in config:
+            curMonitor = self.win_interface.getWindowMonitor()
+            newMonitor = (curMonitor + 1) % monitor_count
+            self.win_interface.setWindowMonitor(newMonitor)
+        if "left" in config or "right" in config:
+            global monitor, monitor_width, monitor_height, aspect_ratio
+            monitor = get_monitors()[self.win_interface.getWindowMonitor()]
+            monitor_width = monitor.width
+            monitor_height = monitor.height
+            aspect_ratio = monitor_width / monitor_height
+            self.win.requestProperties(
+                WindowProperties(
+                    size=(monitor.width, monitor.height - 49),
+                    origin=(monitor.x, monitor.y),
+                )
+            )
 
 
 if __name__ == "__main__":
@@ -116,7 +201,7 @@ if __name__ == "__main__":
                 text_scale=0.5,
                 command=app.launch,
                 extraArgs=[cli],
-                pos=(-0.5 * aspect_ratio, 0, (-app.serverButtonsOffset) + 0.4),
+                pos=(0, 0, (-app.serverButtonsOffset) + 0.35),
             )
         )
         app.serverButtonsOffset += 0.2

@@ -16,21 +16,21 @@ class mainWindow(ShowBase):
         self.setBackgroundColor(0, 0, 0)
         self.disableMouse()
         self.accept("q", self.quit)
-        self.launch_client_button = DirectButton(
-            text="Launch Client",
+        self.launch_server_button = DirectButton(
+            text="Launch Server",
             pos=(0, 0, 0.35),
             scale=0.6,
             geom=None,
             relief=DGG.FLAT,
-            command=self.launch_client,
+            command=self.launch_server,
         )
-        self.launch_server_button = DirectButton(
-            text="Launch Server",
+        self.launch_client_button = DirectButton(
+            text="Launch Client",
             pos=(0, 0, -0.35),
             scale=0.6,
             geom=None,
             relief=DGG.FLAT,
-            command=self.launch_server,
+            command=self.launch_client,
         )
 
     def launch_server(self):
