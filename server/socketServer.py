@@ -17,17 +17,11 @@ def send_message(message, target_client=None):
     if target_client:
         if target_client in clients:
             clients[target_client].put(message)
-            print(
-                f"SERVER: Added message to outbound queue for {target_client.remote_address}: {message}"
-            )
         else:
             print(f"SERVER: Target client not found: {target_client}")
     else:
         for wsock, q in clients.items():
             q.put(message)
-            print(
-                f"SERVER: Added message to outbound queue for {wsock.remote_address}: {message}"
-            )
 
 
 def iter_messages():
@@ -58,9 +52,6 @@ async def handle_client(websocket):
                 message = await websocket.recv()
                 if message:
                     inbound.append((websocket, message))
-                    print(
-                        f"SERVER: Received message from {websocket.remote_address}: {message}"
-                    )
             except ws.ConnectionClosed:
                 print(f"SERVER: Connection closed by client {websocket.remote_address}")
                 unregister_client(websocket)
@@ -77,11 +68,8 @@ async def handle_client(websocket):
                 if not q.empty():
                     message = q.get()
                     await websocket.send(message)
-                    print(
-                        f"SERVER: Sent message to {websocket.remote_address}: {message}"
-                    )
                 else:
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(1 / 60)
             except ws.ConnectionClosed:
                 print(
                     f"SERVER: Connection closed while sending to {websocket.remote_address}"

@@ -24,12 +24,12 @@ async def ping_url(url):
 class Connection:
     def __init__(self, GRAPHQL_URL="http://localhost:4444/graphql"):
         try:
-            asyncio.run(self.connect(GRAPHQL_URL))
+            asyncio.run(self.async_connect(GRAPHQL_URL))
         except KeyboardInterrupt:
             print("Connection interrupted by user.")
             sys.exit(0)
 
-    async def connect(self, GRAPHQL_URL):
+    async def async_connect(self, GRAPHQL_URL):
         await ping_url(GRAPHQL_URL)
         transport = AIOHTTPTransport(url=GRAPHQL_URL)
         self.session = Client(
@@ -73,7 +73,7 @@ class Connection:
         self.thrusterIds = [thruster["id"] for thruster in result["thrusters"]]
         print(f"Thruster IDs: {self.thrusterIds}")
 
-    async def set_thruster_direction(self, pitch, roll, yaw):
+    async def async_set_thruster_rotation(self, pitch, roll, yaw):
         setThrusterDirection = gql(
             f"""mutation setThrusterDirection {{
     rotationSet(id:"{self.thrusterIds[0]}", rotation: {{
@@ -85,7 +85,43 @@ class Connection:
         )
         result = await self.session.execute_async(setThrusterDirection)
 
-    async def get_thruster_info(self):
+    async def async_set_thruster_direction(self, x, y, z):
+        setThrusterDirection = gql(
+            f"""mutation setThrustersPos {{
+    directionUpdate(
+      id: "{self.thrusterIds[0]}",
+        direction: {{
+          x:{x}
+          y:{y}
+          z:{z}
+        }}
+    )
+            }}"""
+        )
+        result = await self.session.execute_async(setThrusterDirection)
+        return result
+
+    async def async_get_thruster_loc_rot(self):
+        getThrusterLocRot = gql(
+            f"""query getThrusters {{
+    thrusters(simulatorId: "{self.simulatorId}") {{
+      direction{{
+        x
+        y
+        z
+    }}
+      rotation {{
+        roll
+        pitch
+        yaw
+      }}
+  }}
+}}"""
+        )
+        result = await self.session.execute_async(getThrusterLocRot)
+        return result["thrusters"][0]["direction"], result["thrusters"][0]["rotation"]
+
+    async def async_get_thruster_info(self):
         getThrusterInfo = gql(
             f"""query GetThrusterInfo {{
   thruster(id: "{self.thrusterIds[0]}") {{
@@ -127,6 +163,27 @@ class Connection:
         result = await self.session.execute_async(getThrusterInfo)
         return result["thruster"]
 
+    def get_thruster_info(self):
+        return asyncio.run(self.async_get_thruster_info())
+
+    def get_thruster_loc_rot(self):
+        return asyncio.run(self.async_get_thruster_loc_rot())
+
+    def set_thruster_rotation(self, pitch, roll, yaw):
+        asyncio.run(self.async_set_thruster_rotation(pitch, roll, yaw))
+
+    def set_thruster_direction(self, x, y, z):
+        asyncio.run(self.async_set_thruster_direction(x, y, z))
+
+    def get_thruster_ids(self):
+        return self.thrusterIds
+
+    def get_simulator_id(self):
+        return self.simulatorId
+
+    def get_session(self):
+        return self.session
+
 
 if __name__ == "__main__":
     conn = Connection()
@@ -134,4 +191,4 @@ if __name__ == "__main__":
     while True:
         sleep(1 / 60)
         rot = tuple(map(lambda x: x + 1, rot))
-        asyncio.run(conn.set_thruster_direction(*rot))
+        asyncio.run(conn.async_set_thruster_rotation(*rot))

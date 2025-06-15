@@ -14,6 +14,7 @@ from socketServer import (
     iter_messages,
     launch_server,
 )
+from thorium_api import Connection, asyncio
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -43,6 +44,7 @@ class serverProgram(ShowBase):
         self.client_info = {}
         self.accept("q", self.quit)
         self.taskMgr.add(self.client_loop, "client_loop")
+        self.thorium_connection = Connection()
 
     def client_loop(self, task):
         for entry in iter_messages():
@@ -141,8 +143,14 @@ class serverProgram(ShowBase):
             text="Begin Simulation",
             scale=0.1,
             pos=(0, 0, -0.8),
-            command=lambda: send_message("START_SIMULATION"),
+            command=lambda: send_message("START_SIMULATION")
+            or self.taskMgr.add(self.update, "update_thruster_rotation"),
         )
+
+    def update(self, task):
+        distance_changed = self.thorium_connection.get_thruster_loc_rot()
+        send_message("UPDATE_THORIUM_SHIP_POSITION||+" + dumps(distance_changed))
+        return task.cont
 
 
 if __name__ == "__main__":

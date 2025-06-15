@@ -37,7 +37,6 @@ def _connect_to_server(uri):
                         message = await websocket.recv()
                         if message:
                             incoming.append(message)
-                            print(f"CLIENT: Received message: {message}")
                     except ws.ConnectionClosed:
                         print("CLIENT: Connection closed")
                         break
@@ -53,7 +52,7 @@ def _connect_to_server(uri):
                             await websocket.send(message)
                             print(f"CLIENT: Sent message: {message}")
                         else:
-                            await asyncio.sleep(0.1)  # <-- Add this line
+                            await asyncio.sleep(1 / 60)  # <-- Add this line
                     except ws.ConnectionClosed:
                         print("CLIENT: Connection closed while sending")
                         break

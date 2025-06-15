@@ -155,6 +155,8 @@ class clientProgram(ShowBase):
                 self.build_world()
             elif message == "START_SIMULATION":
                 self.start_simulation()
+            elif message.startswith("UPDATE_THORIUM_SHIP_POSITION"):
+                self.update_thruster_position(message.split("||+")[1])
             elif message == "QUIT":
                 self.quit()
             else:
@@ -168,8 +170,10 @@ class clientProgram(ShowBase):
         self.alert.destroy()
         self.worldGrid = self.generateGrid(300, 5)
         self.worldGrid.hide()
-        self.camera.setPos(0, -8, 1)
-        self.camera.lookAt(0, 0, 0.5)
+        self.camera_joint = self.render.attachNewNode("camera_joint")
+        self.camera.reparentTo(self.camera_joint)
+        self.camera.setPos(0, -15, 0)
+        self.camera.lookAt(0, 0, 0)
         send_message("CLIENT_READY")
 
     def start_simulation(self):
@@ -226,6 +230,19 @@ class clientProgram(ShowBase):
                     origin=(monitor.x, monitor.y),
                 )
             )
+
+    def update_thruster_position(self, data):
+        data = loads(data)
+        self.camera_joint.setPos(
+            data[0]["x"] / 10 + self.camera_joint.getX(),
+            data[0]["y"] / 10 + self.camera_joint.getY(),
+            data[0]["z"] / 10 + self.camera_joint.getZ(),
+        )
+        self.camera_joint.setHpr(
+            data[1]["yaw"],
+            data[1]["pitch"],
+            -data[1]["roll"],
+        )
 
 
 if __name__ == "__main__":
