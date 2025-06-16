@@ -1,4 +1,5 @@
 from json import dumps, loads
+from re import S
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
@@ -15,6 +16,7 @@ from socketServer import (
     launch_server,
 )
 from thorium_api import Connection, asyncio
+import base64
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -41,10 +43,36 @@ class serverProgram(ShowBase):
         super().__init__(*args, **kwargs)
         self.setBackgroundColor(0, 0, 0)
         self.disableMouse()
-        self.client_info = {}
+        self.client_info = {"MONITOR_INDEX": 0}
         self.accept("q", self.quit)
         self.taskMgr.add(self.client_loop, "client_loop")
         self.thorium_connection = Connection()
+        self.base_object = {
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0],
+            "hitbox_scale": [1, 1, 1],
+            "hitbox_offset": [0, 0, 0],
+            "hitbox_type": "box" or None,
+            "hitbox_geom": None or list(tuple()),
+            "size": [1, 1, 1],
+            "id": "name",
+            "color": [1, 0, 0],
+            "colorScale": [1, 1, 1, 1],
+            "texture": "name.png" or None,
+            "texData": None or list(tuple()),
+            "onHit": None or "function_name",
+            "visible": True,
+            "colidable": True,
+        }
+        self.base_config_data = {
+            "MONITOR_INDEX": 0,
+            "OBJECTS": {
+                "SHIP": self.base_object,
+                "OBSTACLES": [self.base_object],
+                "TARGETS": [self.base_object],
+            },
+        }
+        self.savedClientData = self.base_config_data.copy()
 
     def client_loop(self, task):
         for entry in iter_messages():
@@ -55,8 +83,15 @@ class serverProgram(ShowBase):
                 info_id = message.split("||+")[1]
                 client_info = message.split("||+")[2]
                 self.client_info[info_id] = loads(client_info)
+                if info_id == "MONITOR_INDEX":
+                    self.savedClientData["MONITOR_INDEX"] = self.client_info[
+                        "MONITOR_INDEX"
+                    ]
             elif message == "CLIENT_READY":
                 self.setPreSimulation()
+            elif message.startswith("UPDATE_DATA"):
+                data = message.split("||+")[1]
+                self.updateData(loads(data))
             else:
                 print(f"SERVER: Received unknown message: {message}")
         return task.cont
@@ -65,13 +100,78 @@ class serverProgram(ShowBase):
         print("SERVER: Exiting server program...")
         self.userExit()
 
-    def client_config(self, wsock, data, value=True):
-        config_data = {
-            data: value,
-        }
-        send_message("CLIENT_CONFIG||+" + dumps(config_data), target_client=wsock)
+    def client_config(self, wsock, data):
+        send_message("CLIENT_CONFIG||+" + data, target_client=wsock)
+
+    def updateData(self, data):
+        self.savedClientData["OBJECTS"]["SHIP"]["position"] = data["ship"]["pos"]
+        self.savedClientData["OBJECTS"]["SHIP"]["rotation"] = data["ship"]["rot"]
+
+    def loadSavedConfig(self, name):
+        if not os.path.exists(f"config/{name}.dat"):
+            with open(f"config/{name}.dat", "wb") as f:
+                encoded = base64.b64encode(
+                    dumps(self.base_config_data, indent=4).encode()
+                )
+                f.write(encoded)
+        with open(f"config/{name}.dat", "rb") as f:
+            config_data = f.read()
+        ret = loads(base64.b64decode(config_data))
+        self.client_config(None, "set_monitor_" + str(ret["MONITOR_INDEX"]))
+        self.client_config(None, "set_ship_" + dumps(ret["OBJECTS"]["SHIP"]))
+        self.savedClientData = ret
+        return ret
+
+    def saveSimulationData(self):
+        def saveConfig(name):
+            if not name:
+                return
+            config_data = self.savedClientData or {
+                "MONITOR_INDEX": (
+                    self.client_info["MONITOR_INDEX"]
+                    if "MONITOR_INDEX" in self.client_info
+                    else 0
+                ),
+                "OBJECTS": {
+                    "SHIP": {
+                        "position": [0, 0, 0],
+                        "rotation": [0, 0, 0],
+                        "hitbox_scale": [1, 1, 1],
+                        "hitbox_offset": [0, 0, 0],
+                        "hitbox_type": "box",
+                        "hitbox_geom": None,
+                        "size": [1, 1, 1],
+                        "id": "ship",
+                        "color": [1, 0, 0],
+                        "colorScale": [1, 1, 1, 1],
+                        "texture": None,
+                        "texData": None,
+                        "onHit": None,
+                        "visible": True,
+                        "colidable": True,
+                    },
+                    "OBSTACLES": [],
+                    "TARGETS": [],
+                },
+            }
+            with open(f"config/{name}.dat", "wb") as f:
+                encoded = base64.b64encode(dumps(config_data, indent=4).encode())
+                f.write(encoded)
+            print(f"Config saved as {name}.dat")
+            nameRequest.destroy()
+
+        nameRequest = DirectEntry(
+            text="",
+            scale=0.1,
+            pos=(-0.8, 0, 0.9),
+            initialText="Name",
+            numLines=1,
+            command=saveConfig,
+        )
 
     def runClientConfig(self, wsock):
+        if not os.path.exists("config"):
+            os.makedirs("config")
         if "MONITOR_CONFIG" not in self.client_info:
             self.taskMgr.doMethodLater(
                 0.1,
@@ -107,7 +207,22 @@ class serverProgram(ShowBase):
             text="Start Flight",
             scale=0.1,
             pos=(0, 0, -0.8),
-            command=lambda: send_message("BUILD_WORLD", target_client=wsock),
+            command=lambda: send_message("BUILD_WORLD", target_client=wsock)
+            or self.loadConfigDropdown.destroy(),
+        )
+        self.loadConfigDropdown = DirectOptionMenu(
+            text="Load Config",
+            scale=0.1,
+            pos=(-1.1, 0, 0.9),
+            items=["Load a saved config"]
+            + [
+                f.split(os.path.sep)[-1].removesuffix(".dat")
+                for f in os.listdir("config")
+                if f.endswith(".dat")
+            ],
+            command=lambda x: (
+                self.loadSavedConfig(x) if x != "Load a saved config" else None
+            ),
         )
         self.accept("arrow_left", self.client_config, extraArgs=[wsock, "left"])
         self.accept("arrow_right", self.client_config, extraArgs=[wsock, "right"])
@@ -143,8 +258,20 @@ class serverProgram(ShowBase):
             text="Begin Simulation",
             scale=0.1,
             pos=(0, 0, -0.8),
-            command=lambda: send_message("START_SIMULATION")
-            or self.taskMgr.add(self.update, "update_thruster_rotation"),
+            command=lambda: [
+                send_message("START_SIMULATION"),
+                self.taskMgr.add(self.update, "update_thruster_rotation"),
+                self.simulationStart(),
+            ][0],
+        )
+
+    def simulationStart(self):
+        self.beginSimulationButton.destroy()
+        self.saveButton = DirectButton(
+            text="Save",
+            scale=0.1,
+            pos=(-0.9, 0, 0.9),
+            command=self.saveSimulationData,
         )
 
     def update(self, task):

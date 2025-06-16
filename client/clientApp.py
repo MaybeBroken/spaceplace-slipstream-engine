@@ -14,7 +14,9 @@ from panda3d.core import (
     TransparencyAttrib,
     WindowProperties,
     LineSegs,
+    Vec3,
 )
+from direct.filter.CommonFilters import CommonFilters
 import direct.stdpy.threading as threading
 import win32con
 import win32gui
@@ -27,6 +29,7 @@ from socketClient import (
     send_message,
     iter_messages,
     search_servers,
+    register_disconnect_callback,
 )
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -75,6 +78,14 @@ class clientProgram(ShowBase):
         super().__init__(*args, **kwargs)
         self.setBackgroundColor(0, 0, 0)
         self.render.set_antialias(AntialiasAttrib.MAuto)
+        register_disconnect_callback(lambda: os.kill(os.getpid(), 9))
+        filterMgr = CommonFilters(self.win, self.cam)
+        filterMgr.setMSAA(8)
+
+        self.camera_joint = self.render.attachNewNode("camera_joint")
+        self.camera.reparentTo(self.camera_joint)
+        self.camera.setPos(0, -15, 0)
+        self.camera.lookAt(0, 0, 0)
 
         # Transparency
         self.render2d.setTransparency(TransparencyAttrib.MAlpha)
@@ -125,7 +136,7 @@ class clientProgram(ShowBase):
         self.serverButtons = []
 
     def launch(self, serverName):
-        threading.Thread(target=start_client, args=(serverName,), daemon=True).start()
+        threading.Thread(target=start_client, args=(serverName,)).start()
         self.serverListHeading.destroy()
         self.serverListPanel.destroy()
         [button.destroy() for button in self.serverButtons]
@@ -165,19 +176,17 @@ class clientProgram(ShowBase):
 
     def build_world(self):
         # Placeholder for world-building logic
-        print("CLIENT: Building world... (not implemented)")
         self.alert.setText("CLIENT: Building world...")
         self.alert.destroy()
         self.worldGrid = self.generateGrid(300, 5)
         self.worldGrid.hide()
-        self.camera_joint = self.render.attachNewNode("camera_joint")
-        self.camera.reparentTo(self.camera_joint)
-        self.camera.setPos(0, -15, 0)
-        self.camera.lookAt(0, 0, 0)
         send_message("CLIENT_READY")
 
     def start_simulation(self):
         self.worldGrid.show()
+        self.taskMgr.doMethodLater(
+            0.25, self.updateServerPositionData, "updateServerPositionData"
+        )
 
     def generateGrid(self, grid_size=100, spacing=10):
         self.gridNode = self.render.attachNewNode("gridNode")
@@ -218,7 +227,11 @@ class clientProgram(ShowBase):
             curMonitor = self.win_interface.getWindowMonitor()
             newMonitor = (curMonitor + 1) % monitor_count
             self.win_interface.setWindowMonitor(newMonitor)
-        if "left" in config or "right" in config:
+        if config.startswith("set_monitor_"):
+            newMonitor = int(config.split("_")[-1])
+            if newMonitor < monitor_count:
+                self.win_interface.setWindowMonitor(newMonitor)
+        if "left" in config or "right" in config or config.startswith("set_monitor_"):
             global monitor, monitor_width, monitor_height, aspect_ratio
             monitor = get_monitors()[self.win_interface.getWindowMonitor()]
             monitor_width = monitor.width
@@ -230,6 +243,44 @@ class clientProgram(ShowBase):
                     origin=(monitor.x, monitor.y),
                 )
             )
+            send_message(
+                "CLIENT_INFO||+MONITOR_INDEX||+"
+                + str(self.win_interface.getWindowMonitor())
+            )
+        if config.startswith("set_ship_"):
+            ship_data = loads(config.split("set_ship_")[-1])
+            self.camera_joint.setPos(
+                ship_data["position"][0],
+                ship_data["position"][1],
+                ship_data["position"][2],
+            )
+            self.camera_joint.setHpr(
+                ship_data["rotation"][0],
+                ship_data["rotation"][1],
+                ship_data["rotation"][2],
+            )
+
+    def updateServerPositionData(self, task):
+        send_message(
+            "UPDATE_DATA||+"
+            + dumps(
+                {
+                    "ship": {
+                        "pos": [
+                            self.camera_joint.getX(),
+                            self.camera_joint.getY(),
+                            self.camera_joint.getZ(),
+                        ],
+                        "rot": [
+                            self.camera_joint.getH(),
+                            self.camera_joint.getP(),
+                            self.camera_joint.getR(),
+                        ],
+                    }
+                }
+            )
+        )
+        return task.again
 
     def update_thruster_position(self, data):
         data = loads(data)

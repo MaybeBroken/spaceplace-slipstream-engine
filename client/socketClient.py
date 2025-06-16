@@ -26,6 +26,24 @@ def iter_messages():
     return [json.loads(id) for id in val]
 
 
+disconnect_callback = lambda: None
+
+
+def register_disconnect_callback(callback):
+    """
+    Register a callback function to be called when the client disconnects.
+    The callback should accept no arguments.
+    """
+
+    def disconnect_handler():
+        print("WS override => Connection closed")
+        callback()
+
+    # Override the default connection closed handler
+    global disconnect_callback
+    disconnect_callback = disconnect_handler
+
+
 def _connect_to_server(uri):
     async def connect():
         async with ws.connect(uri) as websocket:
@@ -39,6 +57,7 @@ def _connect_to_server(uri):
                             incoming.append(message)
                     except ws.ConnectionClosed:
                         print("CLIENT: Connection closed")
+                        disconnect_callback()
                         break
                     except Exception as e:
                         print(f"CLIENT: Error receiving message: {e}")
@@ -50,11 +69,11 @@ def _connect_to_server(uri):
                         if outbound:
                             message = outbound.pop(0)
                             await websocket.send(message)
-                            print(f"CLIENT: Sent message: {message}")
                         else:
                             await asyncio.sleep(1 / 60)  # <-- Add this line
                     except ws.ConnectionClosed:
                         print("CLIENT: Connection closed while sending")
+                        disconnect_callback()
                         break
                     except Exception as e:
                         print(f"CLIENT: Error sending message: {e}")
