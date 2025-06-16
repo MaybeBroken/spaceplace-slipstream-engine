@@ -284,15 +284,27 @@ class clientProgram(ShowBase):
 
     def update_thruster_position(self, data):
         data = loads(data)
-        self.camera_joint.setPos(
-            data[0]["x"] / 10 + self.camera_joint.getX(),
-            data[0]["y"] / 10 + self.camera_joint.getY(),
-            data[0]["z"] / 10 + self.camera_joint.getZ(),
-        )
+        # self.camera_joint.setPos(
+        #     data[0]["x"] / 10 + self.camera_joint.getX(),
+        #     data[0]["y"] / 10 + self.camera_joint.getY(),
+        #     1,
+        # )
+        # Clamp pitch to [-45, 45], wrap yaw to [0, 360)
+        # If you want pitch to be only [0, 45] and [315, 360], remap accordingly:
+        pitch = data[1]["pitch"] % 360
+        # Clamp pitch to [0, 45] and [315, 360]
+        if 0 <= pitch <= 45:
+            mapped_pitch = pitch
+        elif 315 <= pitch < 360:
+            mapped_pitch = pitch
+        elif pitch < 315 and pitch > 180:
+            mapped_pitch = 315
+        else:
+            mapped_pitch = 45
         self.camera_joint.setHpr(
-            data[1]["yaw"],
-            data[1]["pitch"],
-            -data[1]["roll"],
+            (data[1]["yaw"] % 360),
+            mapped_pitch,
+            0,
         )
 
 
