@@ -57,6 +57,10 @@ loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
 loadPrcFileData("", "background-color 0 0 0 0")
 loadPrcFileData("", "active-display-region true")
 loadPrcFileData("", "framebuffer-alpha true")
+loadPrcFileData("", "load-display pandagl")
+loadPrcFileData("", "aux-display p3tinydisplay")
+loadPrcFileData("", "aux-display pandadx9")
+loadPrcFileData("", "aux-display pandadx8")
 
 
 def generate_monitor_list():
@@ -77,6 +81,7 @@ class clientProgram(ShowBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setBackgroundColor(0, 0, 0)
+        self.backfaceCullingOn()
         self.render.set_antialias(AntialiasAttrib.MAuto)
         register_disconnect_callback(lambda: os.kill(os.getpid(), 9))
         filterMgr = CommonFilters(self.win, self.cam)
@@ -183,6 +188,9 @@ class clientProgram(ShowBase):
         self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
         self.voyager_model.setScale(0.15)
         self.voyager_model.reparentTo(self.render)
+        self.render.prepareScene(self.win.getGsg())
+        self.voyager_model.flattenLight()
+        self.voyager_model.flattenStrong()
         self.camera_joint.reparentTo(self.voyager_model)
         self.voyager_model.hide()
         self.alert.destroy()

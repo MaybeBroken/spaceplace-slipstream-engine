@@ -1,9 +1,11 @@
+from datetime import date
 from json import dumps, loads
 from re import S
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
 from panda3d.core import *
+from panda3d.core import TransparencyAttrib, PNMImage
 from screeninfo import get_monitors
 import mouse
 import sys
@@ -17,6 +19,7 @@ from socketServer import (
 )
 from thorium_api import Connection, asyncio
 import base64
+from PIL import Image
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -36,6 +39,51 @@ aspect_ratio = monitor_width / monitor_height
 
 loadPrcFileData("", "win-size 800 600")
 loadPrcFileData("", "window-title Slipstream Server")
+loadPrcFileData("", "load-display pandagl")
+loadPrcFileData("", "aux-display p3tinydisplay")
+loadPrcFileData("", "aux-display pandadx9")
+loadPrcFileData("", "aux-display pandadx8")
+
+import requests
+
+if not os.path.exists("textures"):
+    os.makedirs("textures")
+if not os.path.exists("textures/apod.txt"):
+    with open("textures/apod.txt", "w") as f:
+        f.write("NULL")
+with open("textures/apod.txt", "r") as f:
+    last_date = f.read().strip()
+if last_date != date.today().isoformat() or not os.path.exists("textures/apod.jpg"):
+
+    API_KEY = "DEMO_KEY"
+    URL = f"https://api.nasa.gov/planetary/apod?api_key={API_KEY}"
+
+    APOD_response = requests.get(URL)
+    APOD_data: dict = APOD_response.json()
+
+    def fetch_file(url: str, local_path: str) -> None:
+
+        try:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with requests.get(url, stream=True) as response:
+                response.raise_for_status()  # Raise an error for bad responses
+                with open(local_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+        except requests.RequestException as e:
+            print(f"Error downloading file {url}: {e}")
+        except Exception as e:
+            print(f"Error saving file {url} at {local_path}: {e}")
+
+    if APOD_data.get("media_type") == "image":
+        image_url = APOD_data.get("hdurl") or APOD_data.get("url")
+        fetch_file(image_url, "textures/apod.jpg")
+        with open("textures/apod.txt", "w") as f:
+            f.write(date.today().isoformat())
+        with open("textures/apod_info.txt", "w") as f:
+            f.write(APOD_data.get("title", ""))
+            f.write("||+")
+            f.write(APOD_data.get("explanation", ""))
 
 
 class serverProgram(ShowBase):
@@ -73,6 +121,61 @@ class serverProgram(ShowBase):
             },
         }
         self.savedClientData = self.base_config_data.copy()
+        if os.path.exists("textures/apod.jpg"):
+            image = Image.open("textures/apod.jpg")
+            self.apod_image = OnscreenImage(
+                image="textures/apod.jpg",
+                pos=(0, -0.5, -0.1),
+                scale=(
+                    1.5,
+                    1,
+                    1.5 * image.height / image.width,
+                ),
+            )
+            self.apod_image.setTransparency(TransparencyAttrib.MAlpha)
+        self.init_text = OnscreenText(
+            text="Waiting for client to connect...",
+            pos=(0, 0.45),
+            scale=0.15,
+            fg=(1, 1, 1, 1),
+            bg=(0, 0, 0, 0.4),
+            align=TextNode.ACenter,
+        )
+        self.init_text.setTransparency(TransparencyAttrib.MAlpha)
+        self.instruction_text = OnscreenText(
+            text="Please complete setup in thorium first, if not already done: go to the client config and assign the Slipstream Engine to the active flight and the Slipstream Core page",
+            pos=(0, 0.25),
+            scale=0.05,
+            wordwrap=25,
+            fg=(1, 1, 1, 0.7),
+            bg=(0, 0, 0, 0.4),
+            align=TextNode.ACenter,
+        )
+        self.instruction_text.setTransparency(TransparencyAttrib.MAlpha)
+        if os.path.exists("textures/apod_info.txt"):
+            with open("textures/apod_info.txt", "r") as f:
+                apod_info = f.read().split("||+")
+            self.apod_title = OnscreenText(
+                text=apod_info[0],
+                pos=(1, -0.8),
+                scale=0.05,
+                fg=(1, 1, 1, 1),
+                bg=(0, 0, 0, 0),
+                align=TextNode.ARight,
+            )
+            self.apod_title.setTransparency(TransparencyAttrib.MAlpha)
+        if os.path.exists("textures/apod.txt"):
+            with open("textures/apod.txt", "r") as f:
+                last_date = f.read().strip()
+            self.apod_date = OnscreenText(
+                text=f"{last_date}",
+                pos=(-1, 0.9),
+                scale=0.06,
+                fg=(1, 1, 1, 1),
+                bg=(0, 0, 0, 0),
+                align=TextNode.ALeft,
+            )
+            self.apod_date.setTransparency(TransparencyAttrib.MAlpha)
 
     def client_loop(self, task):
         for entry in iter_messages():
@@ -179,6 +282,12 @@ class serverProgram(ShowBase):
                 "wait_for_monitor_config",
             )
             return
+        self.init_text.destroy()
+        self.instruction_text.destroy()
+        if hasattr(self, "apod_title"):
+            self.apod_title.destroy()
+        if hasattr(self, "apod_date"):
+            self.apod_date.destroy()
         self.clientScreenText = OnscreenText(
             text="Press the buttons or use the arrow keys to control which screen the client is on.",
             wordwrap=20,
@@ -215,8 +324,8 @@ class serverProgram(ShowBase):
         )
         self.loadConfigDropdown = DirectOptionMenu(
             text="Load Config",
-            scale=0.1,
-            pos=(-1.1, 0, 0.9),
+            scale=0.08,
+            pos=(-1.25, 0, 0.91),
             items=["Load a saved config"]
             + [
                 f.split(os.path.sep)[-1].removesuffix(".dat")
