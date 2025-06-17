@@ -73,14 +73,14 @@ class Connection:
         self.thrusterIds = [thruster["id"] for thruster in result["thrusters"]]
         print(f"Thruster IDs: {self.thrusterIds}")
 
-    async def async_set_thruster_rotation(self, pitch, roll, yaw):
+    async def async_set_thruster_rotation(self, yaw, pitch, roll):
         rotation_fields = []
+        if yaw != None:
+            rotation_fields.append(f"yaw: {yaw}")
         if pitch != None:
             rotation_fields.append(f"pitch: {pitch}")
         if roll != None:
             rotation_fields.append(f"roll: {roll}")
-        if yaw != None:
-            rotation_fields.append(f"yaw: {yaw}")
         rotation_str = ", ".join(rotation_fields)
         setThrusterDirection = gql(
             f"""mutation setThrusterDirection {{
@@ -175,8 +175,8 @@ class Connection:
     def get_thruster_loc_rot(self):
         return asyncio.run(self.async_get_thruster_loc_rot())
 
-    def set_thruster_rotation(self, pitch=None, roll=None, yaw=None):
-        asyncio.run(self.async_set_thruster_rotation(pitch, roll, yaw))
+    def set_thruster_rotation(self, yaw=None, pitch=None, roll=None):
+        asyncio.run(self.async_set_thruster_rotation(yaw, pitch, roll))
 
     def set_thruster_direction(self, x, y, z):
         asyncio.run(self.async_set_thruster_direction(x, y, z))

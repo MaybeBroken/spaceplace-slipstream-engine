@@ -177,13 +177,20 @@ class clientProgram(ShowBase):
     def build_world(self):
         # Placeholder for world-building logic
         self.alert.setText("CLIENT: Building world...")
-        self.alert.destroy()
+        self.graphicsEngine.renderFrame()
         self.worldGrid = self.generateGrid(300, 5)
         self.worldGrid.hide()
+        self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
+        self.voyager_model.setScale(0.15)
+        self.voyager_model.reparentTo(self.render)
+        self.camera_joint.reparentTo(self.voyager_model)
+        self.voyager_model.hide()
+        self.alert.destroy()
         send_message("CLIENT_READY")
 
     def start_simulation(self):
         self.worldGrid.show()
+        self.voyager_model.show()
         self.taskMgr.doMethodLater(
             0.25, self.updateServerPositionData, "updateServerPositionData"
         )
@@ -293,14 +300,14 @@ class clientProgram(ShowBase):
         # If you want pitch to be only [0, 45] and [315, 360], remap accordingly:
         pitch = data[1]["pitch"] % 360
         # Clamp pitch to [0, 45] and [315, 360]
-        if 0 <= pitch <= 45:
+        if 0 <= pitch <= 35:
             mapped_pitch = pitch
-        elif 315 <= pitch < 360:
+        elif 270 <= pitch < 360:
             mapped_pitch = pitch
-        elif pitch < 315 and pitch > 180:
-            mapped_pitch = 315
+        elif pitch < 270 and pitch > 35:
+            mapped_pitch = 270
         else:
-            mapped_pitch = 45
+            mapped_pitch = 35
         self.camera_joint.setHpr(
             (data[1]["yaw"] % 360),
             mapped_pitch,

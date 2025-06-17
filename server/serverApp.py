@@ -207,8 +207,11 @@ class serverProgram(ShowBase):
             text="Start Flight",
             scale=0.1,
             pos=(0, 0, -0.8),
-            command=lambda: send_message("BUILD_WORLD", target_client=wsock)
-            or self.loadConfigDropdown.destroy(),
+            command=lambda: [
+                send_message("BUILD_WORLD", target_client=wsock),
+                self.startButton.setText("Loading..."),
+                self.loadConfigDropdown.destroy(),
+            ][0],
         )
         self.loadConfigDropdown = DirectOptionMenu(
             text="Load Config",
@@ -273,7 +276,7 @@ class serverProgram(ShowBase):
             pos=(-0.9, 0, 0.9),
             command=self.saveSimulationData,
         )
-        self.thorium_connection.set_thruster_rotation(0, 0, 0)
+        self.thorium_connection.set_thruster_rotation(0, 270, 0)
 
     def update(self, task):
         distance_changed = self.thorium_connection.get_thruster_loc_rot()
