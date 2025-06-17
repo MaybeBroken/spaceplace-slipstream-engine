@@ -8,7 +8,11 @@ import direct.stdpy.threading as threading
 
 loadPrcFileData("", "win-size 350 150")
 loadPrcFileData("", "window-title Slipstream Launcher")
-
+loadPrcFileData("", "win-fixed-size true")
+loadPrcFileData("", "load-display pandagl")
+loadPrcFileData("", "aux-display p3tinydisplay")
+loadPrcFileData("", "aux-display pandadx9")
+loadPrcFileData("", "aux-display pandadx8")
 
 class mainWindow(ShowBase):
     def __init__(self):

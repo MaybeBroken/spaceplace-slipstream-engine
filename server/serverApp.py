@@ -294,10 +294,11 @@ class serverProgram(ShowBase):
             pos=(0, 0.8),
             scale=0.07,
             fg=(1, 1, 1, 1),
-            bg=(0, 0, 0, 1),
+            bg=(0, 0, 0, 0.4),
             align=TextNode.ACenter,
             mayChange=True,
         )
+        self.clientScreenText.setTransparency(TransparencyAttrib.MAlpha)
         self.leftButton = DirectButton(
             text="<",
             scale=0.1,
@@ -312,10 +313,18 @@ class serverProgram(ShowBase):
             command=self.client_config,
             extraArgs=[wsock, "right"],
         )
+        self.sizeBoundsFrame = DirectFrame(
+            parent=self.aspect2d,
+            frameSize=(-1, 1, -0.75, 0.75),
+            frameColor=(0, 0, 0, 0.8),
+            scale=0.9,
+            pos=(0, 0, -0.15),
+        )
+        self.sizeBoundsFrame.setTransparency(TransparencyAttrib.MAlpha)
         self.startButton = DirectButton(
             text="Start Flight",
             scale=0.1,
-            pos=(0, 0, -0.8),
+            pos=(0, 0, -0.92),
             command=lambda: [
                 send_message("BUILD_WORLD", target_client=wsock),
                 self.startButton.setText("Loading..."),
@@ -351,7 +360,7 @@ class serverProgram(ShowBase):
                     screenObj["height"] / 2,
                 ),
                 frameColor=(0.3, 0.3, 0.3, 1),
-                pos=(index, 0, 0.5),
+                pos=(index, 0, 0.6),
                 scale=0.000125,
             )
             self.cliMonitorObjects.append(node)
