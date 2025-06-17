@@ -5,6 +5,7 @@ from gql.transport.aiohttp import AIOHTTPTransport
 import sys
 import aiohttp
 import json
+import threading
 
 
 async def ping_url(url):
@@ -24,7 +25,7 @@ async def ping_url(url):
 class Connection:
     def __init__(self, GRAPHQL_URL="http://localhost:4444/graphql"):
         try:
-            asyncio.run(self.async_connect(GRAPHQL_URL))
+            threading.Thread(target=lambda: asyncio.run(self.async_connect(GRAPHQL_URL)), daemon=True).start()
         except KeyboardInterrupt:
             print("Connection interrupted by user.")
             sys.exit(0)
@@ -56,10 +57,15 @@ class Connection:
     }
 }"""
         )
-
-        result = await self.session.execute_async(getSimulatorId)
-        self.simulatorId = result["clients"][0]["simulator"]["id"]
-        print(f"Simulator ID: {self.simulatorId}")
+        print("Fetching simulator ID...")
+        while True:
+            try:
+                result = await self.session.execute_async(getSimulatorId)
+                self.simulatorId = result["clients"][0]["simulator"]["id"]
+                print(f"Simulator ID: {self.simulatorId}")
+                break
+            except Exception as e:
+                await asyncio.sleep(1)
 
         getThrustersId = gql(
             f"""query GetThrusterId {{
