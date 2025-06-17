@@ -273,6 +273,7 @@ class serverProgram(ShowBase):
             pos=(-0.9, 0, 0.9),
             command=self.saveSimulationData,
         )
+        self.thorium_connection.set_thruster_rotation(0, 0, 0)
 
     def update(self, task):
         distance_changed = self.thorium_connection.get_thruster_loc_rot()
