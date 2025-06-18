@@ -1,5 +1,5 @@
 from json import dumps, loads
-from time import sleep
+from time import sleep, time
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
 from screeninfo import get_monitors
@@ -14,7 +14,7 @@ from panda3d.core import (
     TransparencyAttrib,
     WindowProperties,
     LineSegs,
-    Vec3,
+    Point3,
 )
 from direct.filter.CommonFilters import CommonFilters
 import direct.stdpy.threading as threading
@@ -22,6 +22,40 @@ import win32con
 import win32gui
 import win32api
 from win32controller import win32_WIN_Interface, win32_SYS_Interface
+from worldgen import WorldGen, WorldManager
+from direct.stdpy.threading import Thread
+import random
+
+import numpy as np
+from scipy.stats import norm
+
+
+# Precompute the bell curve CDF at high resolution, but use vectorized numpy for fast mapping
+_x = np.linspace(0, 1, 10000)
+_pdf = norm.pdf(_x, loc=0.5, scale=0.15)
+_pdf /= _pdf.sum()
+_cdf = np.cumsum(_pdf)
+
+
+def map_weights_to_range(obj_percent_list):
+    total_weight = sum(weight for _, weight in obj_percent_list)
+    normalized_weights = np.array(
+        [weight / total_weight for _, weight in obj_percent_list]
+    )
+
+    # Compute CDF boundaries for each object
+    cdf_bounds = np.concatenate(([0], np.cumsum(normalized_weights)))
+    # Find indices in _cdf for all boundaries at once
+    idxs = np.searchsorted(_cdf, cdf_bounds)
+    idxs = np.clip(idxs, 0, len(_x) - 1)
+    # Map to x values
+    x_vals = _x[idxs]
+
+    results = []
+    for i, (obj, _) in enumerate(obj_percent_list):
+        results.append([obj, float(x_vals[i]), float(x_vals[i + 1])])
+    return results
+
 
 # local imports
 from socketClient import (
@@ -184,7 +218,7 @@ class clientProgram(ShowBase):
         self.alert.setText("CLIENT: Building world...")
         self.graphicsEngine.renderFrame()
         self.worldGrid = self.generateGrid(300, 5)
-        self.worldGrid.hide()
+        self.boxModel = self.loader.loadModel("models/box")
         self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
         self.voyager_model.setScale(0.15)
         self.voyager_model.reparentTo(self.render)
@@ -192,16 +226,56 @@ class clientProgram(ShowBase):
         self.voyager_model.flattenLight()
         self.voyager_model.flattenStrong()
         self.camera_joint.reparentTo(self.voyager_model)
-        self.voyager_model.hide()
+        self.worldGen = WorldGen(
+            -1, self.camera, chunk_size=8, voxel_scale=25, noise_scale=1
+        )
+
+        self.objects = [
+            [None, 80],
+            ["models/box", 10],
+            ["models/rock", 5],
+            ["models/asteroid", 3],
+            ["models/ship", 1],
+            ["models/space_station", 1],
+        ]
+        self.objects = map_weights_to_range(self.objects)
+        self.WorldManager = WorldManager(self.worldGen, self.camera, renderDistance=6)
+        self.renderedChunks = set()
+        self.render.hide()
+        # List containing objects and their percentage chance of spawning
+        self.taskMgr.add(self.renderTerrain, "renderTerrain")
         self.alert.destroy()
         send_message("CLIENT_READY")
 
     def start_simulation(self):
-        self.worldGrid.show()
-        self.voyager_model.show()
+        self.render.show()
         self.taskMgr.doMethodLater(
             0.25, self.updateServerPositionData, "updateServerPositionData"
         )
+
+    def renderTerrain(self, task):
+        self.WorldManager.update()
+        newChunks = self.WorldManager.newChunks - self.WorldManager.lastNewChunks
+
+        for chunk in newChunks:
+            xCoord, yCoord = chunk
+            chunkData = self.worldGen.GENERATED_CHUNKS[chunk]
+            for x, y, point in chunkData:
+                coord3D = Point3(
+                    xCoord * self.worldGen.CHUNK_SIZE + x,
+                    yCoord * self.worldGen.CHUNK_SIZE + y,
+                    0,
+                )
+                if coord3D in self.renderedChunks:
+                    pass
+                pointIndex = (point + 1) / 2
+                if pointIndex >= 0.8:
+                    model = self.boxModel.copyTo(self.render)
+                    model.setPos(coord3D.getX(), coord3D.getY(), 0)
+                    self.renderedChunks.add(coord3D)
+                self.graphicsEngine.renderFrame()
+
+        self.WorldManager.lastNewChunks = self.WorldManager.newChunks.copy()
 
     def generateGrid(self, grid_size=100, spacing=10):
         self.gridNode = self.render.attachNewNode("gridNode")
