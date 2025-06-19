@@ -14,7 +14,10 @@ from panda3d.core import (
     TransparencyAttrib,
     WindowProperties,
     LineSegs,
-    Point3,
+    Shader,
+    Vec4,
+    Vec3,
+    ColorBlendAttrib,
 )
 from direct.filter.CommonFilters import CommonFilters
 import direct.stdpy.threading as threading
@@ -28,6 +31,15 @@ import random
 
 import numpy as np
 from scipy.stats import norm
+
+
+def clamp(value, min_value, max_value):
+    if value <= min_value:
+        return min_value
+    elif value >= max_value:
+        return max_value
+    else:
+        return value
 
 
 # Precompute the bell curve CDF at high resolution, but use vectorized numpy for fast mapping
@@ -217,8 +229,19 @@ class clientProgram(ShowBase):
         # Placeholder for world-building logic
         self.alert.setText("CLIENT: Building world...")
         self.graphicsEngine.renderFrame()
-        self.worldGrid = self.generateGrid(300, 5)
+        self.camLens.setNearFar(0.01, 20000)
+        self.worldGrid = self.generateGrid(100, 20)
         self.boxModel = self.loader.loadModel("models/box")
+        self.circleModel = self.loader.loadModel("models/Circle/circle.bam")
+        self.distanceShader = Shader.load(
+            Shader.SL_GLSL,
+            "shaders/fade.vert",
+            "shaders/fade.frag",
+        )
+        self.circleModel.setShader(self.distanceShader)
+        self.circleModel.setShaderInput("fadeDistance", 1)
+        self.circleModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
+        self.circleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
         self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
         self.voyager_model.setScale(0.15)
         self.voyager_model.reparentTo(self.render)
@@ -226,20 +249,65 @@ class clientProgram(ShowBase):
         self.voyager_model.flattenLight()
         self.voyager_model.flattenStrong()
         self.camera_joint.reparentTo(self.voyager_model)
-        self.worldGen = WorldGen(
-            -1, self.camera, chunk_size=8, voxel_scale=25, noise_scale=1
-        )
+        self.blackHoleModel = self.circleModel.__copy__()
+        self.blackHoleModel.setScale(60)
+        self.blackHoleModel.setShaderInput("fadeDistance", 55)
+        self.blackHoleModel.setShaderInput("fadeColor", Vec4(0, 0, 0, 1))
+        self.blackHoleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.wormholeModel = self.circleModel.__copy__()
+        self.wormholeModel.setScale(-25)
+        self.wormholeModel.setShaderInput("fadeDistance", 21)
+        self.wormholeModel.setShaderInput("fadeColor", Vec4(1, 0.05, 0.3, 1))
+        self.wormholeModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.nebulaModel = self.circleModel.__copy__()
+        self.nebulaModel.setScale(15)
+        self.nebulaModel.setShaderInput("fadeDistance", 11)
+        self.nebulaModel.setShaderInput("fadeColor", Vec4(0.5, 0.5, 1, 1))
+        self.nebulaModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.solarSystemModel = self.circleModel.__copy__()
+        self.solarSystemModel.setScale(7)
+        self.solarSystemModel.setShaderInput("fadeDistance", 5)
+        self.solarSystemModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
+        self.solarSystemModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.roguePlanetModel = self.circleModel.__copy__()
+        self.roguePlanetModel.setScale(1.5)
+        self.roguePlanetModel.setShaderInput("fadeDistance", 1)
+        self.roguePlanetModel.setShaderInput("fadeColor", Vec4(0.6, 1, 0.8, 1))
+        self.roguePlanetModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.render.setTransparency(TransparencyAttrib.MAlpha)
 
         self.objects = [
             [None, 80],
-            ["models/box", 10],
-            ["models/rock", 5],
-            ["models/asteroid", 3],
-            ["models/ship", 1],
-            ["models/space_station", 1],
+            [self.solarSystemModel, 45 * 0.2],
+            [self.roguePlanetModel, 35 * 0.2],
+            [self.nebulaModel, 15 * 0.2],
+            [self.wormholeModel, 4 * 0.2],
+            [self.blackHoleModel, 1 * 0.2],
         ]
         self.objects = map_weights_to_range(self.objects)
-        self.WorldManager = WorldManager(self.worldGen, self.camera, renderDistance=6)
+        self.object_ranges = [
+            (start, end, model)
+            for model, start, end in map_weights_to_range(
+                [
+                    [None, 80],
+                    [self.solarSystemModel, 45 * 0.2],
+                    [self.roguePlanetModel, 35 * 0.2],
+                    [self.nebulaModel, 15 * 0.2],
+                    [self.wormholeModel, 4 * 0.2],
+                    [self.blackHoleModel, 1 * 0.2],
+                ]
+            )
+            if model is not None
+        ]
+        self.worldGen = WorldGen(
+            threshold=-1, chunk_size=6, voxel_scale=1, noise_scale=1
+        )
+        self.WorldManager = WorldManager(
+            WorldGen=self.worldGen,
+            renderObject=self.voyager_model,
+            renderDistance=6,
+            scale_multiplier=80,
+        )
         self.renderedChunks = set()
         self.render.hide()
         # List containing objects and their percentage chance of spawning
@@ -248,10 +316,12 @@ class clientProgram(ShowBase):
         send_message("CLIENT_READY")
 
     def start_simulation(self):
+        print("CLIENT: Starting simulation...")
         self.render.show()
         self.taskMgr.doMethodLater(
             0.25, self.updateServerPositionData, "updateServerPositionData"
         )
+        print("CLIENT: Rendering in progress")
 
     def renderTerrain(self, task):
         self.WorldManager.update()
@@ -260,22 +330,55 @@ class clientProgram(ShowBase):
         for chunk in newChunks:
             xCoord, yCoord = chunk
             chunkData = self.worldGen.GENERATED_CHUNKS[chunk]
-            for x, y, point in chunkData:
-                coord3D = Point3(
-                    xCoord * self.worldGen.CHUNK_SIZE + x,
-                    yCoord * self.worldGen.CHUNK_SIZE + y,
-                    0,
-                )
-                if coord3D in self.renderedChunks:
-                    pass
-                pointIndex = (point + 1) / 2
-                if pointIndex >= 0.8:
-                    model = self.boxModel.copyTo(self.render)
-                    model.setPos(coord3D.getX(), coord3D.getY(), 0)
-                    self.renderedChunks.add(coord3D)
-                self.graphicsEngine.renderFrame()
+            arr = np.array(chunkData)
+            xs = arr[:, 0]
+            ys = arr[:, 1]
+            points = arr[:, 2]
+            coords3D = np.stack(
+                [
+                    xCoord * self.worldGen.CHUNK_SIZE + xs,
+                    yCoord * self.worldGen.CHUNK_SIZE + ys,
+                    np.zeros_like(xs),
+                ],
+                axis=1,
+            )
+            pointIndices = (points + 1) / 2
+
+            coords3D_tuples = [tuple(coord) for coord in coords3D]
+            not_rendered_mask = [
+                tuple(coord) not in self.renderedChunks for coord in coords3D
+            ]
+            coords3D = coords3D[not_rendered_mask]
+            pointIndices = pointIndices[not_rendered_mask]
+            coords3D_tuples = [tuple(coord) for coord in coords3D]
+
+            for i, coord3D in enumerate(coords3D):
+                pointIndex = pointIndices[i]
+                for start, end, model in self.object_ranges:
+                    if start <= pointIndex < end:
+                        instance = model.copyTo(self.render)
+                        instancePos = Vec3(
+                            (coord3D[0] * 25) + (random.randint(80, 300) / 10),
+                            (coord3D[1] * 25) + (random.randint(80, 300) / 10),
+                            0,
+                        )
+                        instance.setPos(instancePos)
+                        instance.setShaderInput("fadeCenter", instancePos)
+                        instance.setTransparency(TransparencyAttrib.MAlpha)
+                        instance.setAttrib(
+                            ColorBlendAttrib.make(
+                                ColorBlendAttrib.MAdd,  # Additive blending
+                                ColorBlendAttrib.OIncomingAlpha,
+                                ColorBlendAttrib.OOne,
+                            )
+                        )
+                        break
+                self.renderedChunks.add(coords3D_tuples[i])
+
+            self.graphicsEngine.renderFrame()
 
         self.WorldManager.lastNewChunks = self.WorldManager.newChunks.copy()
+        return task.cont
 
     def generateGrid(self, grid_size=100, spacing=10):
         self.gridNode = self.render.attachNewNode("gridNode")
@@ -373,11 +476,9 @@ class clientProgram(ShowBase):
 
     def update_thruster_position(self, data):
         data = loads(data)
-        # self.camera_joint.setPos(
-        #     data[0]["x"] / 10 + self.camera_joint.getX(),
-        #     data[0]["y"] / 10 + self.camera_joint.getY(),
-        #     1,
-        # )
+        yVal = -data[0]["z"] * 0.3 + self.camera.getY()
+        if -10 >= yVal >= -100:
+            self.camera.setPos(0, yVal, 0)
         # Clamp pitch to [-45, 45], wrap yaw to [0, 360)
         # If you want pitch to be only [0, 45] and [315, 360], remap accordingly:
         pitch = data[1]["pitch"] % 360

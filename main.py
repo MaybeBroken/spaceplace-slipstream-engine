@@ -14,6 +14,7 @@ loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
 
+
 class mainWindow(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
