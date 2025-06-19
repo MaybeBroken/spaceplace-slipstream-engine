@@ -28,6 +28,7 @@ from win32controller import win32_WIN_Interface, win32_SYS_Interface
 from worldgen import WorldGen, WorldManager
 from direct.stdpy.threading import Thread
 import random
+from physics import physicsMgr
 
 import numpy as np
 from scipy.stats import norm
@@ -243,7 +244,7 @@ class clientProgram(ShowBase):
         self.circleModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
         self.circleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
         self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
-        self.voyager_model.setScale(0.15)
+        self.voyager_model.setScale(0.1)
         self.voyager_model.reparentTo(self.render)
         self.render.prepareScene(self.win.getGsg())
         self.voyager_model.flattenLight()
