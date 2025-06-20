@@ -10,7 +10,7 @@ from screeninfo import get_monitors
 import mouse
 import sys
 import os
-from panda3d.core import loadPrcFileData, TextNode
+from panda3d.core import loadPrcFileData, TextNode, LineSegs
 import direct.stdpy.threading as threading
 from socketServer import (
     send_message,
@@ -43,6 +43,8 @@ loadPrcFileData("", "load-display pandagl")
 loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
+loadPrcFileData("", f"win-fixed-size true")
+loadPrcFileData("", f"want-pstats true")
 
 import requests
 
@@ -160,7 +162,7 @@ class serverProgram(ShowBase):
                 pos=(1, -0.8),
                 scale=0.05,
                 fg=(1, 1, 1, 1),
-                bg=(0, 0, 0, 0),
+                bg=(0, 0, 0, 0.4),
                 align=TextNode.ARight,
             )
             self.apod_title.setTransparency(TransparencyAttrib.MAlpha)
@@ -172,7 +174,7 @@ class serverProgram(ShowBase):
                 pos=(-1, 0.9),
                 scale=0.06,
                 fg=(1, 1, 1, 1),
-                bg=(0, 0, 0, 0),
+                bg=(0, 0, 0, 0.4),
                 align=TextNode.ALeft,
             )
             self.apod_date.setTransparency(TransparencyAttrib.MAlpha)
@@ -195,6 +197,9 @@ class serverProgram(ShowBase):
             elif message.startswith("UPDATE_DATA"):
                 data = message.split("||+")[1]
                 self.updateData(loads(data))
+            elif message.startswith("NEW_OBJECT"):
+                data = message.split("||+")[1]
+                self.newObject(loads(data))
             else:
                 print(f"SERVER: Received unknown message: {message}")
         return task.cont
@@ -209,6 +214,27 @@ class serverProgram(ShowBase):
     def updateData(self, data):
         self.savedClientData["OBJECTS"]["SHIP"]["position"] = data["ship"]["pos"]
         self.savedClientData["OBJECTS"]["SHIP"]["rotation"] = data["ship"]["rot"]
+
+    def newObject(self, data):
+        if data["id"] == "ship":
+            self.savedClientData["OBJECTS"]["SHIP"] = data
+        elif data["id"] == "obstacle":
+            self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
+        elif data["id"] == "target":
+            self.savedClientData["OBJECTS"]["TARGETS"].append(data)
+        scale = 0.01
+        node = DirectFrame(
+            parent=self.aspect2d,
+            frameSize=(-1, 1, -1, 1),
+            frameColor=tuple(data["color"]),
+            pos=(
+                data["position"][0] * scale,
+                0,
+                data["position"][1] * scale,
+            ),
+            scale=data["size"][0] * scale,
+        )
+        node.reparentTo(self.mapObjectNode)
 
     def loadSavedConfig(self, name):
         if not os.path.exists(f"config/{name}.dat"):
@@ -365,33 +391,90 @@ class serverProgram(ShowBase):
             )
             self.cliMonitorObjects.append(node)
 
+    def generateGrid(self, grid_size=100, spacing=10):
+        self.gridNode = self.render.attachNewNode("gridNode")
+
+        # Draw grid lines
+        for x in range(-grid_size, grid_size + 1):
+            line = LineSegs()
+            line.setThickness(1.0)
+            line.setColor(0.3, 0.3, 0.3, 1)  # Gray color
+            # Horizontal line
+            line.moveTo(x * spacing, -grid_size * spacing, 0)
+            line.drawTo(x * spacing, grid_size * spacing, 0)
+            node = line.create()
+            self.gridNode.attachNewNode(node)
+
+        for y in range(-grid_size, grid_size + 1):
+            line = LineSegs()
+            line.setThickness(1.0)
+            line.setColor(0.3, 0.3, 0.3, 1)  # Gray color
+            # Vertical line
+            line.moveTo(-grid_size * spacing, y * spacing, 0)
+            line.drawTo(grid_size * spacing, y * spacing, 0)
+            node = line.create()
+            self.gridNode.attachNewNode(node)
+
+        self.gridNode.setTransparency(TransparencyAttrib.MAlpha)
+        return self.gridNode
+
     def setPreSimulation(self):
         self.clientScreenText.destroy()
         self.leftButton.destroy()
         self.rightButton.destroy()
         self.startButton.destroy()
+        self.sizeBoundsFrame.destroy()
+        self.apod_image.destroy() if hasattr(self, "apod_image") else None
         self.accept("arrow_left", lambda: None)
         self.accept("arrow_right", lambda: None)
         for monitor in self.cliMonitorObjects:
             monitor.destroy()
+        self.map = DirectFrame(
+            parent=self.aspect2d,
+            frameSize=(-1, 1, -1, 1),
+            frameColor=(0, 0, 0, 0),
+            scale=1,
+            pos=(0, 0, 0),
+        )
+        self.map.setTransparency(TransparencyAttrib.MAlpha)
+        self.mapObjectNode = self.map.attachNewNode("mapObjectNode")
+        self.generateGrid(100, 20 * 0.01)
+        self.gridNode.reparentTo(self.mapObjectNode)
+        self.gridNode.setP(90)
+        self.accept(
+            "wheel_up",
+            self.zoomIn,
+        )
+        self.accept(
+            "wheel_down",
+            self.zoomOut,
+        )
 
         self.beginSimulationButton = DirectButton(
             text="Begin Simulation",
             scale=0.1,
-            pos=(0, 0, -0.8),
-            command=lambda: [
-                send_message("START_SIMULATION"),
-                self.taskMgr.add(self.update, "update_thruster_rotation"),
-                self.simulationStart(),
-            ][0],
+            pos=(0, 0, -0.93),
+            command=self.simulationStart,
         )
 
+    def zoomIn(self):
+        current_scale = self.mapObjectNode.getScale()
+        new_scale = current_scale * 1.1
+        self.mapObjectNode.setScale(new_scale)
+
+    def zoomOut(self):
+        current_scale = self.mapObjectNode.getScale()
+        new_scale = current_scale * 0.9
+        self.mapObjectNode.setScale(new_scale)
+
     def simulationStart(self):
+        send_message("START_SIMULATION"),
         self.beginSimulationButton.destroy()
+        self.taskMgr.add(self.update, "update_thruster_rotation")
         self.saveButton = DirectButton(
             text="Save",
             scale=0.1,
-            pos=(-0.9, 0, 0.9),
+            pos=(-0.93, 0, 0.93),
             command=self.saveSimulationData,
         )
         self.thorium_connection.set_thruster_rotation(0, 270, 0)

@@ -108,6 +108,7 @@ loadPrcFileData("", "load-display pandagl")
 loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
+loadPrcFileData("", f"want-pstats true")
 
 
 def generate_monitor_list():
@@ -255,47 +256,42 @@ class clientProgram(ShowBase):
         self.blackHoleModel.setShaderInput("fadeDistance", 55)
         self.blackHoleModel.setShaderInput("fadeColor", Vec4(0, 0, 0, 1))
         self.blackHoleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.blackHoleModel.setColor(0, 0, 0, 1)
         self.wormholeModel = self.circleModel.__copy__()
         self.wormholeModel.setScale(-25)
         self.wormholeModel.setShaderInput("fadeDistance", 21)
         self.wormholeModel.setShaderInput("fadeColor", Vec4(1, 0.05, 0.3, 1))
         self.wormholeModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.wormholeModel.setColor(1, 0.05, 0.3, 1)
         self.nebulaModel = self.circleModel.__copy__()
         self.nebulaModel.setScale(15)
         self.nebulaModel.setShaderInput("fadeDistance", 11)
         self.nebulaModel.setShaderInput("fadeColor", Vec4(0.5, 0.5, 1, 1))
         self.nebulaModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.nebulaModel.setColor(0.5, 0.5, 1, 1)
         self.solarSystemModel = self.circleModel.__copy__()
         self.solarSystemModel.setScale(7)
         self.solarSystemModel.setShaderInput("fadeDistance", 5)
         self.solarSystemModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
         self.solarSystemModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.solarSystemModel.setColor(1, 1, 1, 1)
         self.roguePlanetModel = self.circleModel.__copy__()
         self.roguePlanetModel.setScale(1.5)
         self.roguePlanetModel.setShaderInput("fadeDistance", 1)
         self.roguePlanetModel.setShaderInput("fadeColor", Vec4(0.6, 1, 0.8, 1))
         self.roguePlanetModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.roguePlanetModel.setColor(0.6, 1, 0.8, 1)
         self.render.setTransparency(TransparencyAttrib.MAlpha)
-
-        self.objects = [
-            [None, 80],
-            [self.solarSystemModel, 45 * 0.2],
-            [self.roguePlanetModel, 35 * 0.2],
-            [self.nebulaModel, 15 * 0.2],
-            [self.wormholeModel, 4 * 0.2],
-            [self.blackHoleModel, 1 * 0.2],
-        ]
-        self.objects = map_weights_to_range(self.objects)
         self.object_ranges = [
             (start, end, model)
             for model, start, end in map_weights_to_range(
                 [
-                    [None, 80],
-                    [self.solarSystemModel, 45 * 0.2],
-                    [self.roguePlanetModel, 35 * 0.2],
-                    [self.nebulaModel, 15 * 0.2],
-                    [self.wormholeModel, 4 * 0.2],
-                    [self.blackHoleModel, 1 * 0.2],
+                    [None, 50],
+                    [self.solarSystemModel, 45 * 0.5],
+                    [self.roguePlanetModel, 35 * 0.5],
+                    [self.nebulaModel, 15 * 0.5],
+                    [self.wormholeModel, 4 * 0.5],
+                    [self.blackHoleModel, 1 * 0.5],
                 ]
             )
             if model is not None
@@ -361,16 +357,34 @@ class clientProgram(ShowBase):
                         instancePos = Vec3(
                             (coord3D[0] * 25) + (random.randint(80, 300) / 10),
                             (coord3D[1] * 25) + (random.randint(80, 300) / 10),
-                            0,
+                            random.uniform(
+                                -0.5, 0.5
+                            ),  # Increased Z offset to avoid z-fighting
                         )
                         instance.setPos(instancePos)
                         instance.setShaderInput("fadeCenter", instancePos)
                         instance.setTransparency(TransparencyAttrib.MAlpha)
-                        instance.setAttrib(
-                            ColorBlendAttrib.make(
-                                ColorBlendAttrib.MAdd,  # Additive blending
-                                ColorBlendAttrib.OIncomingAlpha,
-                                ColorBlendAttrib.OOne,
+                        send_message(
+                            "NEW_OBJECT||+"
+                            + dumps(
+                                {
+                                    "position": list(instancePos),
+                                    "rotation": [0, 0, 0],
+                                    "hitbox_scale": [1, 1, 1],
+                                    "hitbox_offset": [0, 0, 0],
+                                    "hitbox_type": "sphere",
+                                    "hitbox_geom": None,
+                                    "size": list(model.getScale()),
+                                    "id": "obstacle",
+                                    "name": str(model.getName()),
+                                    "color": list(model.getColor()),
+                                    "colorScale": [1, 1, 1, 1],
+                                    "texture": None,
+                                    "texData": None,
+                                    "onHit": None,
+                                    "visible": True,
+                                    "colidable": True,
+                                }
                             )
                         )
                         break

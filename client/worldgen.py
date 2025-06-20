@@ -16,7 +16,10 @@ class WorldGen:
     def get_noise_point(self, x, y, z, seed):
         opsx.seed(seed=seed)
         scalar = 6 * self.NOISE_SCALE
-        return opsx.noise4(x=x / scalar, y=y / scalar, z=0, w=z / scalar)
+        return (
+            opsx.noise4(x=x / scalar, y=y / scalar, z=0, w=z / scalar)
+            + opsx.noise4(x=x / scalar / 2, y=y / scalar / 2, z=1, w=z / scalar / 2)
+        ) / 2
 
     def generate_chunk(self, x, y, threshold):
         chunk = []
