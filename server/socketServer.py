@@ -39,18 +39,40 @@ def register_client(client):
 
 
 def unregister_client(client):
-    clients.pop(client, None)
-    print(f"SERVER: Client unregistered: {client.remote_address}")
+    if client in clients:
+        clients.pop(client, None)
+        if disconnect_callback:
+            disconnect_callback()
+        print(f"SERVER: Client unregistered: {client.remote_address}")
+
+
+disconnect_callback = lambda: None
+
+
+def register_disconnect_callback(callback):
+    """
+    Register a callback function to be called when the client disconnects.
+    The callback should accept no arguments.
+    """
+
+    def disconnect_handler():
+        print("WS override => Connection closed")
+        callback()
+
+    # Override the default connection closed handler
+    global disconnect_callback
+    disconnect_callback = disconnect_handler
 
 
 async def handle_client(websocket):
-    register_client(websocket)
 
     async def read_incoming():
         while True:
             try:
                 message = await websocket.recv()
-                if message:
+                if message == "WS_CLIENT_REGISTER":
+                    register_client(websocket)
+                elif message:
                     inbound.append((websocket, message))
             except ws.ConnectionClosed:
                 print(f"SERVER: Connection closed by client {websocket.remote_address}")
@@ -62,8 +84,11 @@ async def handle_client(websocket):
                 break
 
     async def send_outbound():
-        q = clients[websocket]
         while True:
+            if websocket not in clients:
+                await asyncio.sleep(1 / 30)
+                continue
+            q = clients[websocket]
             try:
                 if not q.empty():
                     message = q.get()

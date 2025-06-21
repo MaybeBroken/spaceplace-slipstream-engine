@@ -23,6 +23,7 @@ from socketServer import (
     send_message,
     iter_messages,
     launch_server,
+    register_disconnect_callback,
 )
 from thorium_api import Connection, asyncio
 import base64
@@ -110,15 +111,16 @@ class serverProgram(ShowBase):
             "rotation": [0, 0, 0],
             "hitbox_scale": [1, 1, 1],
             "hitbox_offset": [0, 0, 0],
-            "hitbox_type": "box" or None,
-            "hitbox_geom": None or list(tuple()),
+            "hitbox_type": None,
+            "hitbox_geom": None,
             "size": [1, 1, 1],
-            "id": "name",
+            "id": "obstacle",
+            "name": "name",
             "color": [1, 1, 1, 1],
             "colorScale": [1, 1, 1, 1],
-            "texture": "name.png" or None,
-            "texData": None or list(tuple()),
-            "onHit": None or "function_name",
+            "texture": None,
+            "texData": None,
+            "onHit": None,
             "visible": True,
             "colidable": True,
         }
@@ -248,17 +250,9 @@ class serverProgram(ShowBase):
             self.shipMappingNode = newNode
         return task.again
 
-    def newObject(self, data, customType=False):
+    def newObject(self, data):
         if data["id"] == "ship":
             self.savedClientData["OBJECTS"]["SHIP"] = data
-        if customType:
-            if data["id"] == "obstacle":
-                self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
-            elif data["id"] == "target":
-                self.savedClientData["OBJECTS"]["TARGETS"].append(data)
-            else:
-                print(f"Unknown custom object type: {data['id']}")
-                return
         scale = 0.01
         node = DirectFrame(
             parent=self.aspect2d,
@@ -609,20 +603,23 @@ class serverProgram(ShowBase):
 
     def createObject(self, obj_type, pos):
         obj_data = self.base_object.copy()
-        if obj_type == "obstacle":
-            obj_data["id"] = "obstacle"
-        elif obj_type == "target":
+        if obj_type == "target":
+            self.savedClientData["OBJECTS"]["TARGETS"].append(obj_data)
             obj_data["id"] = "target"
         else:
-            return
-
+            obj_data["id"] = "obstacle"
+            self.savedClientData["OBJECTS"]["OBSTACLES"].append(obj_data)
+        obj_data["name"] = obj_type
         # Set position based on mouse position, map scale, and mapObjectNode position
         obj_data["position"] = [
             pos[0] * 100 / self.map.getScale()[0] + self.mapObjectNode.getX(),
             pos[2] * 100 / self.map.getScale()[1] + self.mapObjectNode.getZ(),
             0,
         ]
-        self.newObject(obj_data, customType=True)
+        send_message(
+            "NEW_OBJECT||+" + dumps(obj_data),
+            target_client=None,
+        )
         self.closePlaceMenu()
 
     def closePlaceMenu(self):

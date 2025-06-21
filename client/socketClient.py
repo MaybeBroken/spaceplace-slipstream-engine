@@ -64,6 +64,7 @@ def _connect_to_server(uri):
                         break
 
             async def send_outbound():
+                await websocket.send("WS_CLIENT_REGISTER")
                 while True:
                     try:
                         if outbound:

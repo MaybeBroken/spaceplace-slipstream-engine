@@ -234,6 +234,8 @@ class clientProgram(ShowBase):
                 self.update_thruster_position(message.split("||+")[1])
             elif message == "QUIT":
                 self.quit()
+            elif message.startswith("NEW_OBJECT"):
+                self.create_new_object(loads(message.split("||+")[1]))
             else:
                 print(f"CLIENT: Received unknown message: {message}")
         return task.cont
@@ -270,7 +272,7 @@ class clientProgram(ShowBase):
         self.blackHoleModel.setName("black_hole")
         self.blackHoleModel.setColor(0, 0, 0, 1)
         self.wormholeModel = self.circleModel.__copy__()
-        self.wormholeModel.setScale(-25)
+        self.wormholeModel.setScale(25)
         self.wormholeModel.setShaderInput("fadeDistance", 21)
         self.wormholeModel.setShaderInput("fadeColor", Vec4(1, 0.05, 0.3, 1))
         self.wormholeModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
@@ -392,6 +394,40 @@ class clientProgram(ShowBase):
             0.25, self.updateServerPositionData, "updateServerPositionData"
         )
         print("CLIENT: Rendering in progress")
+
+    def create_new_object(self, data):
+        position = Vec3(*data["position"])
+        rotation = Vec3(*data["rotation"])
+        hitbox_scale = Vec3(*data["hitbox_scale"])
+        hitbox_offset = Vec3(*data["hitbox_offset"])
+
+        if data["name"] == "black_hole":
+            instance = self.blackHoleModel.copyTo(self.render)
+        elif data["name"] == "wormhole":
+            instance = self.wormholeModel.copyTo(self.render)
+        elif data["name"] == "nebula":
+            instance = self.nebulaModel.copyTo(self.render)
+        elif data["name"] == "solar_system":
+            instance = self.solarSystemModel.copyTo(self.render)
+        elif data["name"] == "rogue_planet":
+            instance = self.roguePlanetModel.copyTo(self.render)
+        else:
+            print(f"Unknown object name: {data['name']}")
+            return
+
+        instance.setPos(position)
+        instance.setHpr(rotation)
+        instance.setShaderInput("fadeCenter", position)
+        instance.setShaderInput("fadeDistance", instance.getScale(self.render)[0])
+        instance.setTransparency(TransparencyAttrib.MAlpha)
+        data["size"] = list(instance.getScale(self.render))
+        data["position"] = list(position)
+        data["rotation"] = list(rotation)
+        data["color"] = list(instance.getColor())
+        data["colorScale"] = list(instance.getColorScale())
+        send_message(
+            "NEW_OBJECT||+" + dumps(data),
+        )
 
     def renderTerrain(self, task):
         self.WorldManager.update()
