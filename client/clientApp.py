@@ -108,7 +108,7 @@ loadPrcFileData("", "load-display pandagl")
 loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
-loadPrcFileData("", f"want-pstats true")
+# loadPrcFileData("", f"want-pstats true")
 
 
 def generate_monitor_list():
@@ -131,9 +131,11 @@ class clientProgram(ShowBase):
         self.setBackgroundColor(0, 0, 0)
         self.backfaceCullingOn()
         self.render.set_antialias(AntialiasAttrib.MAuto)
+        self.physicsMgr = physicsMgr()
+        self.physicsMgr.enable(drag=0, gravity=(0, 0, 0))
         register_disconnect_callback(lambda: os.kill(os.getpid(), 9))
         filterMgr = CommonFilters(self.win, self.cam)
-        filterMgr.setMSAA(8)
+        filterMgr.setMSAA(2)
 
         self.camera_joint = self.render.attachNewNode("camera_joint")
         self.camera.reparentTo(self.camera_joint)
@@ -187,6 +189,15 @@ class clientProgram(ShowBase):
         )
         self.serverButtonsOffset = 0
         self.serverButtons = []
+        self.worldGen = WorldGen(
+            threshold=-1,
+            chunk_size=6,
+            voxel_scale=1,
+            noise_scale=1,
+            seed=0,
+        )
+        self.obstaclesToPlace = []
+        self.targetsToPlace = []
 
     def launch(self, serverName):
         threading.Thread(target=start_client, args=(serverName,)).start()
@@ -256,30 +267,35 @@ class clientProgram(ShowBase):
         self.blackHoleModel.setShaderInput("fadeDistance", 55)
         self.blackHoleModel.setShaderInput("fadeColor", Vec4(0, 0, 0, 1))
         self.blackHoleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.blackHoleModel.setName("black_hole")
         self.blackHoleModel.setColor(0, 0, 0, 1)
         self.wormholeModel = self.circleModel.__copy__()
         self.wormholeModel.setScale(-25)
         self.wormholeModel.setShaderInput("fadeDistance", 21)
         self.wormholeModel.setShaderInput("fadeColor", Vec4(1, 0.05, 0.3, 1))
         self.wormholeModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.wormholeModel.setName("wormhole")
         self.wormholeModel.setColor(1, 0.05, 0.3, 1)
         self.nebulaModel = self.circleModel.__copy__()
         self.nebulaModel.setScale(15)
         self.nebulaModel.setShaderInput("fadeDistance", 11)
         self.nebulaModel.setShaderInput("fadeColor", Vec4(0.5, 0.5, 1, 1))
         self.nebulaModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.nebulaModel.setName("nebula")
         self.nebulaModel.setColor(0.5, 0.5, 1, 1)
         self.solarSystemModel = self.circleModel.__copy__()
         self.solarSystemModel.setScale(7)
         self.solarSystemModel.setShaderInput("fadeDistance", 5)
         self.solarSystemModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
         self.solarSystemModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.solarSystemModel.setName("solar_system")
         self.solarSystemModel.setColor(1, 1, 1, 1)
         self.roguePlanetModel = self.circleModel.__copy__()
         self.roguePlanetModel.setScale(1.5)
         self.roguePlanetModel.setShaderInput("fadeDistance", 1)
         self.roguePlanetModel.setShaderInput("fadeColor", Vec4(0.6, 1, 0.8, 1))
         self.roguePlanetModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
+        self.roguePlanetModel.setName("rogue_planet")
         self.roguePlanetModel.setColor(0.6, 1, 0.8, 1)
         self.render.setTransparency(TransparencyAttrib.MAlpha)
         self.object_ranges = [
@@ -296,9 +312,6 @@ class clientProgram(ShowBase):
             )
             if model is not None
         ]
-        self.worldGen = WorldGen(
-            threshold=-1, chunk_size=6, voxel_scale=1, noise_scale=1
-        )
         self.WorldManager = WorldManager(
             WorldGen=self.worldGen,
             renderObject=self.voyager_model,
@@ -310,7 +323,67 @@ class clientProgram(ShowBase):
         # List containing objects and their percentage chance of spawning
         self.taskMgr.add(self.renderTerrain, "renderTerrain")
         self.alert.destroy()
+        for obstacle in self.obstaclesToPlace:
+            if obstacle["name"] == "black_hole":
+                instance = self.blackHoleModel.copyTo(self.render)
+            elif obstacle["name"] == "wormhole":
+                instance = self.wormholeModel.copyTo(self.render)
+            elif obstacle["name"] == "nebula":
+                instance = self.nebulaModel.copyTo(self.render)
+            elif obstacle["name"] == "solar_system":
+                instance = self.solarSystemModel.copyTo(self.render)
+            elif obstacle["name"] == "rogue_planet":
+                instance = self.roguePlanetModel.copyTo(self.render)
+            instance.setPos(
+                obstacle["position"][0],
+                obstacle["position"][1],
+                obstacle["position"][2],
+            )
+            instance.setHpr(
+                obstacle["rotation"][0],
+                obstacle["rotation"][1],
+                obstacle["rotation"][2],
+            )
+            instance.setScale(
+                obstacle["size"][0],
+                obstacle["size"][1],
+                obstacle["size"][2],
+            )
+            instance.setColorScale(
+                obstacle["colorScale"][0],
+                obstacle["colorScale"][1],
+                obstacle["colorScale"][2],
+                obstacle["colorScale"][3],
+            )
+            instance.setShaderInput("fadeCenter", Vec3(*obstacle["position"]))
+            instance.setShaderInput("fadeDistance", obstacle["hitbox_scale"][0])
+            instance.setShaderInput("fadeColor", Vec4(*obstacle["color"]))
+            instance.setName(obstacle["name"])
+            instance.setTransparency(TransparencyAttrib.MAlpha)
         send_message("CLIENT_READY")
+        send_message(
+            "NEW_OBJECT||+"
+            + dumps(
+                {
+                    "position": list(self.voyager_model.getPos()),
+                    "rotation": [0, 0, 0],
+                    "hitbox_scale": [1, 1, 1],
+                    "hitbox_offset": [0, 0, 0],
+                    "hitbox_type": "sphere",
+                    "hitbox_geom": None,
+                    "size": list(self.voyager_model.getScale()),
+                    "id": "ship",
+                    "name": "ship",
+                    "color": [1, 1, 1, 1],
+                    "colorScale": [1, 1, 1, 1],
+                    "texture": None,
+                    "texData": None,
+                    "onHit": None,
+                    "visible": True,
+                    "colidable": True,
+                }
+            )
+        )
 
     def start_simulation(self):
         print("CLIENT: Starting simulation...")
@@ -355,8 +428,27 @@ class clientProgram(ShowBase):
                     if start <= pointIndex < end:
                         instance = model.copyTo(self.render)
                         instancePos = Vec3(
-                            (coord3D[0] * 25) + (random.randint(80, 300) / 10),
-                            (coord3D[1] * 25) + (random.randint(80, 300) / 10),
+                            (coord3D[0] * 25)
+                            + (
+                                self.worldGen.get_noise_point(
+                                    coord3D[0] * 100,
+                                    coord3D[1] * 100,
+                                    0,
+                                    self.worldGen.seed,
+                                )
+                                + 2
+                            )
+                            * 50,
+                            (coord3D[1] * 25)
+                            + (
+                                self.worldGen.get_noise_point(
+                                    coord3D[1] * 100,
+                                    coord3D[2] * 100,
+                                    0,
+                                    self.worldGen.seed,
+                                )
+                                + 2
+                            ),
                             random.uniform(
                                 -0.5, 0.5
                             ),  # Increased Z offset to avoid z-fighting
@@ -466,6 +558,28 @@ class clientProgram(ShowBase):
                 ship_data["rotation"][1],
                 ship_data["rotation"][2],
             )
+        if config.startswith("set_seed_"):
+            try:
+                self.seed = int(config.split("set_seed_")[-1])
+                self.worldGen.set_seed(self.seed)
+                random.seed(self.seed)
+                send_message("CLIENT_INFO||+SEED||+" + str(self.seed))
+            except Exception as e:
+                print(f"Error setting seed: {e}")
+        if config.startswith("set_obstacles_"):
+            try:
+                obstacles = loads(config.split("set_obstacles_")[-1])
+                self.obstaclesToPlace = obstacles
+                print(f"CLIENT: Set obstacles to place: {self.obstaclesToPlace}")
+            except Exception as e:
+                print(f"Error setting obstacles: {e}")
+        if config.startswith("set_targets_"):
+            try:
+                targets = loads(config.split("set_targets_")[-1])
+                self.targetsToPlace = targets
+                print(f"CLIENT: Set targets to place: {self.targetsToPlace}")
+            except Exception as e:
+                print(f"Error setting targets: {e}")
 
     def updateServerPositionData(self, task):
         send_message(

@@ -13,6 +13,10 @@ class WorldGen:
         self.NOISE_SCALE = noise_scale / self.VOX_SC
         self.seed = seed if seed is not None else int(time() * 1000)
 
+    def set_seed(self, seed):
+        self.seed = seed
+        opsx.seed(seed=seed)
+
     def get_noise_point(self, x, y, z, seed):
         opsx.seed(seed=seed)
         scalar = 6 * self.NOISE_SCALE

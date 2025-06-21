@@ -1,16 +1,23 @@
 from datetime import date
 from json import dumps, loads
+from random import randint
 from re import S
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
 from panda3d.core import *
-from panda3d.core import TransparencyAttrib, PNMImage
 from screeninfo import get_monitors
 import mouse
 import sys
 import os
-from panda3d.core import loadPrcFileData, TextNode, LineSegs
+from panda3d.core import (
+    loadPrcFileData,
+    TextNode,
+    LineSegs,
+    TransparencyAttrib,
+    Vec3,
+    Vec4,
+)
 import direct.stdpy.threading as threading
 from socketServer import (
     send_message,
@@ -20,6 +27,7 @@ from socketServer import (
 from thorium_api import Connection, asyncio
 import base64
 from PIL import Image
+from direct.interval.IntervalGlobal import *
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,7 +52,7 @@ loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
 loadPrcFileData("", f"win-fixed-size true")
-loadPrcFileData("", f"want-pstats true")
+# loadPrcFileData("", f"want-pstats true")
 
 import requests
 
@@ -106,7 +114,7 @@ class serverProgram(ShowBase):
             "hitbox_geom": None or list(tuple()),
             "size": [1, 1, 1],
             "id": "name",
-            "color": [1, 0, 0],
+            "color": [1, 1, 1, 1],
             "colorScale": [1, 1, 1, 1],
             "texture": "name.png" or None,
             "texData": None or list(tuple()),
@@ -116,10 +124,11 @@ class serverProgram(ShowBase):
         }
         self.base_config_data = {
             "MONITOR_INDEX": 0,
+            "SEED": randint(0, 1000000),
             "OBJECTS": {
                 "SHIP": self.base_object,
-                "OBSTACLES": [self.base_object],
-                "TARGETS": [self.base_object],
+                "OBSTACLES": [],
+                "TARGETS": [],
             },
         }
         self.savedClientData = self.base_config_data.copy()
@@ -178,6 +187,8 @@ class serverProgram(ShowBase):
                 align=TextNode.ALeft,
             )
             self.apod_date.setTransparency(TransparencyAttrib.MAlpha)
+        self.mapNodes = []
+        self.currentMapNodeCount = 0
 
     def client_loop(self, task):
         for entry in iter_messages():
@@ -192,6 +203,15 @@ class serverProgram(ShowBase):
                     self.savedClientData["MONITOR_INDEX"] = self.client_info[
                         "MONITOR_INDEX"
                     ]
+                elif info_id == "SEED":
+                    self.savedClientData["SEED"] = self.client_info["SEED"]
+                    self.seedEntry.set(str(self.savedClientData["SEED"]))
+                    LerpColorScaleInterval(
+                        self.seedEntry,
+                        0.5,
+                        Vec4(1, 1, 1, 1),
+                        Vec4(0, 1, 0, 1),
+                    ).start()
             elif message == "CLIENT_READY":
                 self.setPreSimulation()
             elif message.startswith("UPDATE_DATA"):
@@ -215,13 +235,30 @@ class serverProgram(ShowBase):
         self.savedClientData["OBJECTS"]["SHIP"]["position"] = data["ship"]["pos"]
         self.savedClientData["OBJECTS"]["SHIP"]["rotation"] = data["ship"]["rot"]
 
-    def newObject(self, data):
+    def toggleColorTask(self, task):
+        if hasattr(self, "shipMappingNode"):
+            ship_data = self.savedClientData["OBJECTS"]["SHIP"]
+            if ship_data["color"] == [1, 0, 0, 1]:
+                ship_data["color"] = [0, 1, 0, 1]
+            else:
+                ship_data["color"] = [1, 0, 0, 1]
+            newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
+            newNode.setColor(*ship_data["color"])
+            self.shipMappingNode.removeNode()
+            self.shipMappingNode = newNode
+        return task.again
+
+    def newObject(self, data, customType=False):
         if data["id"] == "ship":
             self.savedClientData["OBJECTS"]["SHIP"] = data
-        elif data["id"] == "obstacle":
-            self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
-        elif data["id"] == "target":
-            self.savedClientData["OBJECTS"]["TARGETS"].append(data)
+        if customType:
+            if data["id"] == "obstacle":
+                self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
+            elif data["id"] == "target":
+                self.savedClientData["OBJECTS"]["TARGETS"].append(data)
+            else:
+                print(f"Unknown custom object type: {data['id']}")
+                return
         scale = 0.01
         node = DirectFrame(
             parent=self.aspect2d,
@@ -234,7 +271,23 @@ class serverProgram(ShowBase):
             ),
             scale=data["size"][0] * scale,
         )
-        node.reparentTo(self.mapObjectNode)
+        if self.currentMapNodeCount >= 20 or len(self.mapNodes) == 0:
+            self.currentMapNodeCount = 0
+            parent = self.mapObjectNode.attachNewNode("mapChildNode")
+            self.mapNodes.append(parent)
+            if len(self.mapNodes) > 1:
+                self.mapNodes[-2].flattenLight()
+        else:
+            parent = self.mapNodes[-1]
+        node.reparentTo(parent)
+        if data["id"] == "ship":
+            self.shipMappingNode = node
+            self.doMethodLater(
+                1,
+                self.toggleColorTask,
+                "toggle_color_task",
+            )
+        self.currentMapNodeCount += 1
 
     def loadSavedConfig(self, name):
         if not os.path.exists(f"config/{name}.dat"):
@@ -245,9 +298,12 @@ class serverProgram(ShowBase):
                 f.write(encoded)
         with open(f"config/{name}.dat", "rb") as f:
             config_data = f.read()
-        ret = loads(base64.b64decode(config_data))
+        ret = loads(base64.b32hexdecode(config_data))
         self.client_config(None, "set_monitor_" + str(ret["MONITOR_INDEX"]))
         self.client_config(None, "set_ship_" + dumps(ret["OBJECTS"]["SHIP"]))
+        self.client_config(None, "set_seed_" + str(ret["SEED"]))
+        self.client_config(None, "set_obstacles_" + dumps(ret["OBJECTS"]["OBSTACLES"]))
+        self.client_config(None, "set_targets_" + dumps(ret["OBJECTS"]["TARGETS"]))
         self.savedClientData = ret
         return ret
 
@@ -255,36 +311,41 @@ class serverProgram(ShowBase):
         def saveConfig(name):
             if not name:
                 return
-            config_data = self.savedClientData or {
-                "MONITOR_INDEX": (
-                    self.client_info["MONITOR_INDEX"]
-                    if "MONITOR_INDEX" in self.client_info
-                    else 0
-                ),
-                "OBJECTS": {
-                    "SHIP": {
-                        "position": [0, 0, 0],
-                        "rotation": [0, 0, 0],
-                        "hitbox_scale": [1, 1, 1],
-                        "hitbox_offset": [0, 0, 0],
-                        "hitbox_type": "box",
-                        "hitbox_geom": None,
-                        "size": [1, 1, 1],
-                        "id": "ship",
-                        "color": [1, 0, 0],
-                        "colorScale": [1, 1, 1, 1],
-                        "texture": None,
-                        "texData": None,
-                        "onHit": None,
-                        "visible": True,
-                        "colidable": True,
+            config_data = (
+                {
+                    "MONITOR_INDEX": (
+                        self.client_info["MONITOR_INDEX"]
+                        if "MONITOR_INDEX" in self.client_info
+                        else 0
+                    ),
+                    "SEED": None,
+                    "OBJECTS": {
+                        "SHIP": {
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0],
+                            "hitbox_scale": [1, 1, 1],
+                            "hitbox_offset": [0, 0, 0],
+                            "hitbox_type": "box",
+                            "hitbox_geom": None,
+                            "size": [1, 1, 1],
+                            "id": "ship",
+                            "color": [1, 0, 0],
+                            "colorScale": [1, 1, 1, 1],
+                            "texture": None,
+                            "texData": None,
+                            "onHit": None,
+                            "visible": True,
+                            "colidable": True,
+                        },
+                        "CUSTOM_OBSTACLES": [],
+                        "TARGETS": [],
                     },
-                    "OBSTACLES": [],
-                    "TARGETS": [],
-                },
-            }
+                }
+                if not hasattr(self, "savedClientData")
+                else self.savedClientData.copy()
+            )
             with open(f"config/{name}.dat", "wb") as f:
-                encoded = base64.b64encode(dumps(config_data, indent=4).encode())
+                encoded = base64.b32hexencode(dumps(config_data, indent=4).encode())
                 f.write(encoded)
             print(f"Config saved as {name}.dat")
             nameRequest.destroy()
@@ -371,8 +432,18 @@ class serverProgram(ShowBase):
                 self.loadSavedConfig(x) if x != "Load a saved config" else None
             ),
         )
+        self.seedEntry = DirectEntry(
+            initialText=str(self.savedClientData["SEED"]),
+            scale=0.1,
+            pos=(0.6, 0, 0.9),
+            command=lambda s: self.client_config(wsock, "set_seed_" + s),
+        )
         self.accept("arrow_left", self.client_config, extraArgs=[wsock, "left"])
         self.accept("arrow_right", self.client_config, extraArgs=[wsock, "right"])
+        self.client_config(
+            wsock,
+            ("set_seed_" + self.savedClientData["SEED"].__str__()),
+        )
         index = -1
         self.cliMonitorObjects = []
         for screenObj in self.client_info["MONITOR_CONFIG"]:
@@ -424,11 +495,18 @@ class serverProgram(ShowBase):
         self.rightButton.destroy()
         self.startButton.destroy()
         self.sizeBoundsFrame.destroy()
+        self.seedEntry.destroy()
         self.apod_image.destroy() if hasattr(self, "apod_image") else None
         self.accept("arrow_left", lambda: None)
         self.accept("arrow_right", lambda: None)
         for monitor in self.cliMonitorObjects:
             monitor.destroy()
+        self.saveButton = DirectButton(
+            text="Save",
+            scale=0.1,
+            pos=(-0.93, 0, 0.93),
+            command=self.saveSimulationData,
+        )
         self.map = DirectFrame(
             parent=self.aspect2d,
             frameSize=(-1, 1, -1, 1),
@@ -449,6 +527,11 @@ class serverProgram(ShowBase):
             "wheel_down",
             self.zoomOut,
         )
+        self.accept("mouse1", self.startDrag)
+        self.accept("mouse1-up", self.stopDrag)
+        self.accept("mouse3", self.initPlaceMenu)
+        self.dragging = False
+        self.taskMgr.add(self.drag_task, "drag_task")
 
         self.beginSimulationButton = DirectButton(
             text="Begin Simulation",
@@ -457,26 +540,114 @@ class serverProgram(ShowBase):
             command=self.simulationStart,
         )
 
+    def startDrag(self):
+        self.dragging = True
+        if hasattr(self, "placeMenu") and self.placeMenu is not None:
+            self.closePlaceMenu()
+        self.last_mouse_pos = (
+            self.mouseWatcherNode.getMouse().getX(),
+            self.mouseWatcherNode.getMouse().getY(),
+        )
+        self.mapObjectNodeStartPos = self.mapObjectNode.getPos()
+
+    def stopDrag(self):
+        self.dragging = False
+        self.last_mouse_pos = None
+        self.mapObjectNodeStartPos = None
+
+    def drag_task(self, task):
+        if self.dragging:
+            current_mouse_pos = (
+                self.mouseWatcherNode.getMouse().getX(),
+                self.mouseWatcherNode.getMouse().getY(),
+            )
+            delta = (
+                (current_mouse_pos[0] - self.last_mouse_pos[0])
+                / self.map.getScale()[0],
+                (current_mouse_pos[1] - self.last_mouse_pos[1])
+                / self.map.getScale()[1],
+            )
+            self.mapObjectNode.setPos(
+                self.mapObjectNodeStartPos
+                + Vec3(delta[0] * self.getAspectRatio(), 0, delta[1])
+            )
+        return task.cont
+
+    def initPlaceMenu(self):
+        if hasattr(self, "placeMenu") and self.placeMenu is not None:
+            self.closePlaceMenu()
+        pos = (
+            self.mouseWatcherNode.getMouse().getX() * self.getAspectRatio(),
+            0,
+            self.mouseWatcherNode.getMouse().getY(),
+        )
+        self.placeMenu = DirectFrame(
+            parent=self.aspect2d,
+            frameSize=(0, 0.5, -0.75, 0),
+            frameColor=(0.2, 0.2, 0.2, 0.8),
+            pos=(pos[0], pos[1], pos[2]),
+        )
+        self.placeMenu.setTransparency(TransparencyAttrib.MAlpha)
+        self.placeMenuButtons = []
+        for obj_type in [
+            "black_hole",
+            "wormhole",
+            "nebula",
+            "solar_system",
+            "rogue_planet",
+            "target",
+        ]:
+            button = DirectButton(
+                parent=self.placeMenu,
+                text=obj_type,
+                scale=0.09,
+                pos=(0.25, 0, -0.11 * len(self.placeMenuButtons) - 0.1),
+                command=self.createObject,
+                extraArgs=[obj_type, pos],
+            )
+            self.placeMenuButtons.append(button)
+
+    def createObject(self, obj_type, pos):
+        obj_data = self.base_object.copy()
+        if obj_type == "obstacle":
+            obj_data["id"] = "obstacle"
+        elif obj_type == "target":
+            obj_data["id"] = "target"
+        else:
+            return
+
+        # Set position based on mouse position, map scale, and mapObjectNode position
+        obj_data["position"] = [
+            pos[0] * 100 / self.map.getScale()[0] + self.mapObjectNode.getX(),
+            pos[2] * 100 / self.map.getScale()[1] + self.mapObjectNode.getZ(),
+            0,
+        ]
+        self.newObject(obj_data, customType=True)
+        self.closePlaceMenu()
+
+    def closePlaceMenu(self):
+        if hasattr(self, "placeMenu") and self.placeMenu is not None:
+            self.placeMenu.destroy()
+            self.placeMenu = None
+        for button in self.placeMenuButtons:
+            button.destroy()
+        self.placeMenuButtons = []
+
     def zoomIn(self):
-        current_scale = self.mapObjectNode.getScale()
+        current_scale = self.map.getScale()
         new_scale = current_scale * 1.1
-        self.mapObjectNode.setScale(new_scale)
+        self.map.setScale(new_scale)
 
     def zoomOut(self):
-        current_scale = self.mapObjectNode.getScale()
+        current_scale = self.map.getScale()
         new_scale = current_scale * 0.9
-        self.mapObjectNode.setScale(new_scale)
+        self.map.setScale(new_scale)
 
     def simulationStart(self):
         send_message("START_SIMULATION"),
         self.beginSimulationButton.destroy()
         self.taskMgr.add(self.update, "update_thruster_rotation")
-        self.saveButton = DirectButton(
-            text="Save",
-            scale=0.1,
-            pos=(-0.93, 0, 0.93),
-            command=self.saveSimulationData,
-        )
+
         self.thorium_connection.set_thruster_rotation(0, 270, 0)
 
     def update(self, task):
