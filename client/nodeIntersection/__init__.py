@@ -608,14 +608,16 @@ class Mgr:
         Build a mapping of nearby base actors and colliders within a threshold distance.
         """
         while True:
-            self.nearby_actors = {actor: [] for actor in self.base_actors}
-            self.nearby_colliders = {collider: [] for collider in self.base_colliders}
+            self.nearby_actors = {actor.name: [] for actor in self.base_actors}
+            self.nearby_colliders = {
+                collider.name: [] for collider in self.base_colliders
+            }
             for actor in self.base_actors:
                 for collider in self.base_colliders:
                     if getTotalDistance(actor, collider) <= threshold:
-                        self.nearby_actors[actor].append(collider)
-                        self.nearby_colliders[collider].append(actor)
-                sleep(1 / 240)  # Sleep to avoid busy-waiting
+                        self.nearby_actors[actor.name].append(collider)
+                        self.nearby_colliders[collider.name].append(actor)
+                    sleep(1 / 500)  # Sleep to avoid busy-waiting
 
     def update(self):
         del self.reportedCollisions[:]
@@ -632,7 +634,7 @@ class Mgr:
                     collider.position = collider.nodePath.getPos(base.render)  # type: ignore
                     collider.sphere.setPos(collider.position)
                 # Only check actors that are nearby
-                for actor in self.nearby_colliders.get(collider, []):
+                for actor in self.nearby_colliders.get(collider.name, []):
                     if actor.nodePath is not None:
                         actor.position = actor.nodePath.getPos(base.render)  # type: ignore
                         actor.sphere.setPos(actor.position)
