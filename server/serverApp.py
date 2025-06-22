@@ -1,7 +1,6 @@
 from datetime import date
 from json import dumps, loads
 from random import randint
-from re import S
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
@@ -140,9 +139,9 @@ class serverProgram(ShowBase):
                 image="textures/apod.jpg",
                 pos=(0, -0.5, -0.1),
                 scale=(
-                    1.5,
+                    1 * self.getAspectRatio(),
                     1,
-                    1.5 * image.height / image.width,
+                    1 * self.getAspectRatio() * image.height / image.width,
                 ),
             )
             self.apod_image.setTransparency(TransparencyAttrib.MAlpha)
@@ -247,7 +246,7 @@ class serverProgram(ShowBase):
             newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
             newNode.setColor(*ship_data["color"])
             newNode.setBin("fixed", 0)
-            newNode.setScale(1 / self.map.getScale()[0])
+            newNode.setScale(0.25 / self.map.getScale()[0])
             self.shipMappingNode.removeNode()
             self.shipMappingNode = newNode
         return task.again

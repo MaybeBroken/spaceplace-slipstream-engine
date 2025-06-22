@@ -109,6 +109,7 @@ loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
 # loadPrcFileData("", f"want-pstats true")
+from nodeIntersection import CollisionReport, Mgr as NodeIntersection
 
 
 def generate_monitor_list():
@@ -259,11 +260,28 @@ class clientProgram(ShowBase):
         self.circleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
         self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
         self.voyager_model.setScale(0.1)
-        self.voyager_model.reparentTo(self.render)
-        self.render.prepareScene(self.win.getGsg())
+        self.rootNode = self.render.attachNewNode("rootNode")
+        self.voyager_model.reparentTo(self.rootNode)
+        self.physicsMgr.registerObject(
+            object=self.rootNode,
+            name="ship",
+            velocity=[0, 0, 0],
+            velocityLimit=[10, 10, 10],
+        )
+        NodeIntersection.add_base_actor(
+            radius=1,
+            position=Vec3(*self.rootNode.getPos(self.render)),
+            name="ship",
+            nodePath=self.rootNode,
+        )
+        self.engineRingNode = self.loader.loadModel("models/Ring/ring.bam")
+        self.engineRingNode.reparentTo(self.voyager_model)
+        self.engineRingNode.setScale(8)
+        self.engineRingNode.setTransparency(TransparencyAttrib.MAlpha)
         self.voyager_model.flattenLight()
         self.voyager_model.flattenStrong()
-        self.camera_joint.reparentTo(self.voyager_model)
+        self.render.prepareScene(self.win.getGsg())
+        self.camera_joint.reparentTo(self.rootNode)
         self.blackHoleModel = self.circleModel.__copy__()
         self.blackHoleModel.setScale(60)
         self.blackHoleModel.setShaderInput("fadeDistance", 55)
@@ -363,7 +381,13 @@ class clientProgram(ShowBase):
             instance.setShaderInput("fadeColor", Vec4(*obstacle["color"]))
             instance.setName(obstacle["name"])
             instance.setTransparency(TransparencyAttrib.MAlpha)
+            NodeIntersection.add_base_collider(
+                radius=instance.getScale(self.render)[0],
+                position=Vec3(*obstacle["position"]),
+                name=str(instance.getPos(self.render)),
+            )
             send_message("NEW_OBJECT||+" + dumps(obstacle))
+        NodeIntersection.showCollisions()
         send_message(
             "NEW_OBJECT||+"
             + dumps(
@@ -392,9 +416,18 @@ class clientProgram(ShowBase):
         print("CLIENT: Starting simulation...")
         self.render.show()
         self.taskMgr.doMethodLater(
-            0.25, self.updateServerPositionData, "updateServerPositionData"
+            0.1, self.updateServerPositionData, "updateServerPositionData"
         )
+        self.taskMgr.add(self.update, "updatePhysics")
         print("CLIENT: Rendering in progress")
+
+    def update(self, task):
+        self.physicsMgr.updateWorldPositions()
+        NodeIntersection.update()
+        collision_report: CollisionReport
+        for collision_report in NodeIntersection.get_reported_collisions():
+            print("CLIENT: Collision detected:", collision_report.actor)
+        return task.cont
 
     def create_new_object(self, data):
         position = Vec3(*data["position"])
@@ -493,6 +526,11 @@ class clientProgram(ShowBase):
                         instance.setPos(instancePos)
                         instance.setShaderInput("fadeCenter", instancePos)
                         instance.setTransparency(TransparencyAttrib.MAlpha)
+                        NodeIntersection.add_base_collider(
+                            radius=instance.getScale(self.render)[0],
+                            position=Vec3(*instancePos),
+                            name=str(model.getPos()),
+                        )
                         send_message(
                             "NEW_OBJECT||+"
                             + dumps(
@@ -625,9 +663,9 @@ class clientProgram(ShowBase):
                 {
                     "ship": {
                         "pos": [
-                            self.camera_joint.getX(),
-                            self.camera_joint.getY(),
-                            self.camera_joint.getZ(),
+                            self.voyager_model.getX(),
+                            self.voyager_model.getY(),
+                            self.voyager_model.getZ(),
                         ],
                         "rot": [
                             self.camera_joint.getH(),
@@ -648,6 +686,13 @@ class clientProgram(ShowBase):
         # Clamp pitch to [-45, 45], wrap yaw to [0, 360)
         # If you want pitch to be only [0, 45] and [315, 360], remap accordingly:
         pitch = data[1]["pitch"] % 360
+
+        # Calculate heading (h) from x and y
+        x = data[0]["x"]
+        y = data[0]["y"]
+        heading = -np.degrees(np.arctan2(x, y))
+        self.engineRingNode.setH(heading + 180)
+        self.engineRingNode.setColorScale(1, 1, 1, abs(x) + abs(y))
         # Clamp pitch to [0, 45] and [315, 360]
         if 0 <= pitch <= 35:
             mapped_pitch = pitch
@@ -657,6 +702,11 @@ class clientProgram(ShowBase):
             mapped_pitch = 270
         else:
             mapped_pitch = 35
+        self.voyager_model.setHpr(
+            (data[1]["yaw"] % 360),
+            0,
+            0,
+        )
         self.camera_joint.setHpr(
             (data[1]["yaw"] % 360),
             mapped_pitch,

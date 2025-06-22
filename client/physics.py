@@ -44,7 +44,17 @@ class physicsMgr:
         magneticForce: float = 1.0,
         magneticPole: str = "+" or "-",
     ):
-        self.colliders.append([object, name, pos, orientation, collisionAction, magneticForce, magneticPole])
+        self.colliders.append(
+            [
+                object,
+                name,
+                pos,
+                orientation,
+                collisionAction,
+                magneticForce,
+                magneticPole,
+            ]
+        )
 
     def registerCollisionAction(self, action, extraArgs: list):
         self.collisionActions.append([action, extraArgs])
