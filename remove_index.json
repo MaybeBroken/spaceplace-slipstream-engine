@@ -1,6 +1,7 @@
 {
     "removeList": [
         "main.py",
+        "requirements.txt",
         "client/",
         "server/"
     ]

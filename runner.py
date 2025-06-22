@@ -66,7 +66,7 @@ try:
  --file-index-path {os.path.abspath("remove_index.json")}\
  --root-path "."'
     )
-    os.system("python3 Main.py")
+    os.system("python3 main.py")
 except:
     sleep(3)
     sys.exit(1)

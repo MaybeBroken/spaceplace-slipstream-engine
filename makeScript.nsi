@@ -15,7 +15,6 @@ Section "Install"
 
     # Copy the Python script to the installation directory
     SetOutPath "$INSTDIR"
-    File "SlipstreamEngine.exe"
     File "main.py"
     File "updater.py"
     File "remove_index.json"

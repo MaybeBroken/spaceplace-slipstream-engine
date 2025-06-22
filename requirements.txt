@@ -3,3 +3,7 @@ mouse
 screeninfo
 websockets
 gql
+opensimplex
+pywin32
+numpy
+scipy

@@ -247,6 +247,7 @@ class serverProgram(ShowBase):
             newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
             newNode.setColor(*ship_data["color"])
             newNode.setBin("fixed", 0)
+            newNode.setScale(1 / self.map.getScale()[0])
             self.shipMappingNode.removeNode()
             self.shipMappingNode = newNode
         return task.again
