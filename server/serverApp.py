@@ -235,6 +235,12 @@ class serverProgram(ShowBase):
     def updateData(self, data):
         self.savedClientData["OBJECTS"]["SHIP"]["position"] = data["ship"]["pos"]
         self.savedClientData["OBJECTS"]["SHIP"]["rotation"] = data["ship"]["rot"]
+        self.shipMappingNode.setPos(
+            self.mapObjectNode,
+            data["ship"]["pos"][0] * 0.01,
+            0,
+            data["ship"]["pos"][1] * 0.01,
+        )
 
     def toggleColorTask(self, task):
         if hasattr(self, "shipMappingNode"):
@@ -246,7 +252,7 @@ class serverProgram(ShowBase):
             newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
             newNode.setColor(*ship_data["color"])
             newNode.setBin("fixed", 0)
-            newNode.setScale(0.25 / self.map.getScale()[0])
+            newNode.setScale(0.1 / self.map.getScale()[0])
             self.shipMappingNode.removeNode()
             self.shipMappingNode = newNode
         return task.again

@@ -32,6 +32,7 @@ from physics import physicsMgr
 
 import numpy as np
 from scipy.stats import norm
+import math
 
 
 def clamp(value, min_value, max_value):
@@ -109,7 +110,6 @@ loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
 # loadPrcFileData("", f"want-pstats true")
-from nodeIntersection import CollisionReport, Mgr as NodeIntersection
 
 
 def generate_monitor_list():
@@ -133,7 +133,7 @@ class clientProgram(ShowBase):
         self.backfaceCullingOn()
         self.render.set_antialias(AntialiasAttrib.MAuto)
         self.physicsMgr = physicsMgr()
-        self.physicsMgr.enable(drag=0, gravity=(0, 0, 0))
+        self.physicsMgr.enable(drag=0.0003, gravity=(0, 0, 0))
         register_disconnect_callback(lambda: os.kill(os.getpid(), 9))
         filterMgr = CommonFilters(self.win, self.cam)
         filterMgr.setMSAA(2)
@@ -266,13 +266,7 @@ class clientProgram(ShowBase):
             object=self.rootNode,
             name="ship",
             velocity=[0, 0, 0],
-            velocityLimit=[10, 10, 10],
-        )
-        NodeIntersection.add_base_actor(
-            radius=1,
-            position=Vec3(*self.rootNode.getPos(self.render)),
-            name="ship",
-            nodePath=self.rootNode,
+            velocityLimit=[0.5, 0.5, 0.5],
         )
         self.engineRingNode = self.loader.loadModel("models/Ring/ring.bam")
         self.engineRingNode.reparentTo(self.voyager_model)
@@ -334,14 +328,20 @@ class clientProgram(ShowBase):
         ]
         self.WorldManager = WorldManager(
             WorldGen=self.worldGen,
-            renderObject=self.voyager_model,
-            renderDistance=6,
-            scale_multiplier=80,
+            renderObject=self.rootNode,
+            renderDistance=3,
+            scale_multiplier=1 / self.worldGen.VOX_SC,
         )
         self.renderedChunks = set()
         self.render.hide()
+
         # List containing objects and their percentage chance of spawning
-        self.taskMgr.add(self.renderTerrain, "renderTerrain")
+        def renderTerrainThread():
+            while True:
+                self.renderTerrain()
+                sleep(1 / 20)
+
+        Thread(target=renderTerrainThread).start()
         self.alert.destroy()
         send_message("CLIENT_READY")
         for obstacle in self.obstaclesToPlace:
@@ -381,13 +381,7 @@ class clientProgram(ShowBase):
             instance.setShaderInput("fadeColor", Vec4(*obstacle["color"]))
             instance.setName(obstacle["name"])
             instance.setTransparency(TransparencyAttrib.MAlpha)
-            NodeIntersection.add_base_collider(
-                radius=instance.getScale(self.render)[0],
-                position=Vec3(*obstacle["position"]),
-                name=str(instance.getPos(self.render)),
-            )
             send_message("NEW_OBJECT||+" + dumps(obstacle))
-        NodeIntersection.showCollisions()
         send_message(
             "NEW_OBJECT||+"
             + dumps(
@@ -423,10 +417,31 @@ class clientProgram(ShowBase):
 
     def update(self, task):
         self.physicsMgr.updateWorldPositions()
-        NodeIntersection.update()
-        collision_report: CollisionReport
-        for collision_report in NodeIntersection.get_reported_collisions():
-            print("CLIENT: Collision detected:", collision_report.actor)
+        rotVal = self.engineRingNode.getH()
+        strength = self.engineRingNode.getColorScale()[3]
+        # Get x and y components from rotVal (assuming rotVal is in degrees)
+        rot_rad = math.radians(rotVal)
+        x_component = math.cos(rot_rad)
+        y_component = math.sin(rot_rad)
+        if strength > 0:
+            if tuple(self.physicsMgr.getObjectVelocity(self.rootNode, "ship")) <= (
+                0.001,
+                0.001,
+                0.001,
+            ):
+                self.physicsMgr.setObjectVelocity(
+                    self.rootNode, "ship", [x_component, y_component, 0]
+                )
+            else:
+                self.physicsMgr.addVectorForce(
+                    self.rootNode,
+                    "ship",
+                    [
+                        x_component * strength * 0.001,
+                        y_component * strength * 0.001,
+                        0,  # No vertical force
+                    ],
+                )
         return task.cont
 
     def create_new_object(self, data):
@@ -463,7 +478,7 @@ class clientProgram(ShowBase):
             "NEW_OBJECT||+" + dumps(data),
         )
 
-    def renderTerrain(self, task):
+    def renderTerrain(self):
         self.WorldManager.update()
         newChunks = self.WorldManager.newChunks - self.WorldManager.lastNewChunks
 
@@ -497,8 +512,8 @@ class clientProgram(ShowBase):
                 for start, end, model in self.object_ranges:
                     if start <= pointIndex < end:
                         instance = model.copyTo(self.render)
-                        instancePos = Vec3(
-                            (coord3D[0] * 25)
+                        offset = (
+                            10
                             + (
                                 self.worldGen.get_noise_point(
                                     coord3D[0] * 100,
@@ -508,17 +523,11 @@ class clientProgram(ShowBase):
                                 )
                                 + 2
                             )
-                            * 50,
-                            (coord3D[1] * 25)
-                            + (
-                                self.worldGen.get_noise_point(
-                                    coord3D[1] * 100,
-                                    coord3D[2] * 100,
-                                    0,
-                                    self.worldGen.seed,
-                                )
-                                + 2
-                            ),
+                            * 50
+                        )
+                        instancePos = Vec3(
+                            (coord3D[0] * 25) + offset,
+                            (coord3D[1] * 25) + coord3D[1] % offset / 20,
                             random.uniform(
                                 -0.5, 0.5
                             ),  # Increased Z offset to avoid z-fighting
@@ -526,11 +535,7 @@ class clientProgram(ShowBase):
                         instance.setPos(instancePos)
                         instance.setShaderInput("fadeCenter", instancePos)
                         instance.setTransparency(TransparencyAttrib.MAlpha)
-                        NodeIntersection.add_base_collider(
-                            radius=instance.getScale(self.render)[0],
-                            position=Vec3(*instancePos),
-                            name=str(model.getPos()),
-                        )
+
                         send_message(
                             "NEW_OBJECT||+"
                             + dumps(
@@ -556,11 +561,9 @@ class clientProgram(ShowBase):
                         )
                         break
                 self.renderedChunks.add(coords3D_tuples[i])
-
-            self.graphicsEngine.renderFrame()
+            sleep(1 / 10)
 
         self.WorldManager.lastNewChunks = self.WorldManager.newChunks.copy()
-        return task.cont
 
     def generateGrid(self, grid_size=100, spacing=10):
         self.gridNode = self.render.attachNewNode("gridNode")
@@ -663,9 +666,9 @@ class clientProgram(ShowBase):
                 {
                     "ship": {
                         "pos": [
-                            self.voyager_model.getX(),
-                            self.voyager_model.getY(),
-                            self.voyager_model.getZ(),
+                            self.rootNode.getX(),
+                            self.rootNode.getY(),
+                            self.rootNode.getZ(),
                         ],
                         "rot": [
                             self.camera_joint.getH(),

@@ -19,11 +19,8 @@ class WorldGen:
 
     def get_noise_point(self, x, y, z, seed):
         opsx.seed(seed=seed)
-        scalar = 6 * self.NOISE_SCALE
-        return (
-            opsx.noise4(x=x / scalar, y=y / scalar, z=0, w=z / scalar)
-            + opsx.noise4(x=x / scalar * 2, y=y / scalar * 2, z=1, w=z / scalar * 2)
-        ) / 2
+        scalar = 3 * self.NOISE_SCALE
+        return opsx.noise4(x=x / scalar, y=y / scalar, z=0, w=z / scalar)
 
     def generate_chunk(self, x, y, threshold):
         chunk = []
@@ -44,7 +41,7 @@ class WorldManager:
         self.WorldGen = WorldGen
         self.voxelScale = WorldGen.VOX_SC
         self.renderObject = renderObject
-        self.renderDistance: int = renderDistance * self.voxelScale
+        self.renderDistance: int = renderDistance
         self.activeChunks = set()
         self.lastActiveChunks = set()
         self.newChunks = set()
@@ -55,9 +52,9 @@ class WorldManager:
     def update(self):
         self.generatedChunk = False
         activeChunk = (
-            self.renderObject.getPos()
-            // self.WorldGen.CHUNK_SIZE
-            // self.scale_multiplier
+            (self.renderObject.getPos() // self.WorldGen.CHUNK_SIZE // self.voxelScale)
+            * self.scale_multiplier
+            // self.voxelScale
         )
         activeChunk = [int(activeChunk[0]), int(activeChunk[1])]
         for x in range(

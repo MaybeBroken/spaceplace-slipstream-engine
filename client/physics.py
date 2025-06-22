@@ -160,6 +160,19 @@ class physicsMgr:
             for node in self.registeredObjects:
                 if node[0] == object or node[1] == name:
                     node[3] = [0, 0, 0]
+    
+    def setObjectVelocity(self, object, name, velocity: list):
+        for node in self.registeredObjects:
+            if node[0] == object or node[1] == name:
+                if len(velocity) == 3:
+                    node[2] = velocity
+                else:
+                    exit(
+                        "Warning: incorrect velocity vector for "
+                        + str(node[2])
+                        + " and "
+                        + str(velocity)
+                    )
 
     def getObjectVelocity(self, object, name) -> list[3]:
         for node in self.registeredObjects:
