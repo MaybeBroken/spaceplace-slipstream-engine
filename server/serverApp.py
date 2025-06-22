@@ -246,6 +246,7 @@ class serverProgram(ShowBase):
                 ship_data["color"] = [1, 0, 0, 1]
             newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
             newNode.setColor(*ship_data["color"])
+            newNode.setBin("fixed", 0)
             self.shipMappingNode.removeNode()
             self.shipMappingNode = newNode
         return task.again
@@ -282,6 +283,8 @@ class serverProgram(ShowBase):
                 "toggle_color_task",
             )
         self.currentMapNodeCount += 1
+        if "customSetType" in data:
+            self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
 
     def loadSavedConfig(self, name):
         if not os.path.exists(f"config/{name}.dat"):
@@ -331,7 +334,7 @@ class serverProgram(ShowBase):
                             "visible": True,
                             "colidable": True,
                         },
-                        "CUSTOM_OBSTACLES": [],
+                        "OBSTACLES": [],
                         "TARGETS": [],
                     },
                 }
@@ -498,8 +501,14 @@ class serverProgram(ShowBase):
         self.saveButton = DirectButton(
             text="Save",
             scale=0.1,
-            pos=(-0.93, 0, 0.93),
+            pos=(-0.93, 0, 0.9),
             command=self.saveSimulationData,
+        )
+        self.mapHideButton = DirectButton(
+            text="Hide Map",
+            scale=0.1,
+            pos=(0.93, 0, 0.9),
+            command=self.hideMap,
         )
         self.map = DirectFrame(
             parent=self.aspect2d,
@@ -509,6 +518,9 @@ class serverProgram(ShowBase):
             pos=(0, 0, 0),
         )
         self.map.setTransparency(TransparencyAttrib.MAlpha)
+        self.map.setBin("background", 0)
+        self.map.setDepthWrite(False)
+        self.map.setDepthTest(False)
         self.mapObjectNode = self.map.attachNewNode("mapObjectNode")
         self.generateGrid(100, 20 * 0.01)
         self.gridNode.reparentTo(self.mapObjectNode)
@@ -603,19 +615,17 @@ class serverProgram(ShowBase):
 
     def createObject(self, obj_type, pos):
         obj_data = self.base_object.copy()
-        if obj_type == "target":
-            self.savedClientData["OBJECTS"]["TARGETS"].append(obj_data)
-            obj_data["id"] = "target"
-        else:
-            obj_data["id"] = "obstacle"
-            self.savedClientData["OBJECTS"]["OBSTACLES"].append(obj_data)
         obj_data["name"] = obj_type
-        # Set position based on mouse position, map scale, and mapObjectNode position
+        # Convert screen (mouse) coordinates to map coordinates, accounting for translation and scale
+        map_scale = self.map.getScale()
+        map_x = (pos[0] - (self.mapObjectNode.getX() * map_scale[0])) / map_scale[0]
+        map_y = (pos[2] - (self.mapObjectNode.getZ() * map_scale[2])) / map_scale[2]
         obj_data["position"] = [
-            pos[0] * 100 / self.map.getScale()[0] + self.mapObjectNode.getX(),
-            pos[2] * 100 / self.map.getScale()[1] + self.mapObjectNode.getZ(),
+            map_x * 100,
+            map_y * 100,
             0,
         ]
+        obj_data["customSetType"] = True
         send_message(
             "NEW_OBJECT||+" + dumps(obj_data),
             target_client=None,
@@ -639,6 +649,51 @@ class serverProgram(ShowBase):
         current_scale = self.map.getScale()
         new_scale = current_scale * 0.9
         self.map.setScale(new_scale)
+
+    def hideMap(self):
+        if hasattr(self, "map"):
+            self.map.hide()
+        if hasattr(self, "mapHideButton"):
+            self.mapHideButton.setText("Show Map")
+            self.mapHideButton["command"] = self.showMap
+        self.accept("wheel_up", lambda: None)
+        self.accept("wheel_down", lambda: None)
+        self.accept("mouse1", lambda: None)
+        self.accept("mouse1-up", lambda: None)
+        self.accept("mouse3", lambda: None)
+
+    def showMap(self):
+        if hasattr(self, "map"):
+            self.map.show()
+        if hasattr(self, "mapHideButton"):
+            self.mapHideButton.setText("Hide Map")
+            self.mapHideButton["command"] = self.hideMap
+        self.accept("wheel_up", self.zoomIn)
+        self.accept("wheel_down", self.zoomOut)
+        self.accept("mouse1", self.startDrag)
+        self.accept("mouse1-up", self.stopDrag)
+        self.accept("mouse3", self.initPlaceMenu)
+
+    def destroyMap(self):
+        for node in self.mapNodes:
+            node.removeNode()
+        if hasattr(self, "gridNode"):
+            self.gridNode.removeNode()
+            self.gridNode = None
+        if hasattr(self, "mapObjectNode"):
+            self.mapObjectNode.removeNode()
+            self.mapObjectNode = None
+        if hasattr(self, "map"):
+            self.map.destroy()
+            self.map = None
+        self.mapNodes.clear()
+        self.currentMapNodeCount = 0
+        self.taskMgr.remove("drag_task")
+        self.accept("wheel_up", lambda: None)
+        self.accept("wheel_down", lambda: None)
+        self.accept("mouse1", lambda: None)
+        self.accept("mouse1-up", lambda: None)
+        self.accept("mouse3", lambda: None)
 
     def simulationStart(self):
         send_message("START_SIMULATION"),

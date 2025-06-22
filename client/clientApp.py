@@ -325,6 +325,7 @@ class clientProgram(ShowBase):
         # List containing objects and their percentage chance of spawning
         self.taskMgr.add(self.renderTerrain, "renderTerrain")
         self.alert.destroy()
+        send_message("CLIENT_READY")
         for obstacle in self.obstaclesToPlace:
             if obstacle["name"] == "black_hole":
                 instance = self.blackHoleModel.copyTo(self.render)
@@ -362,7 +363,7 @@ class clientProgram(ShowBase):
             instance.setShaderInput("fadeColor", Vec4(*obstacle["color"]))
             instance.setName(obstacle["name"])
             instance.setTransparency(TransparencyAttrib.MAlpha)
-        send_message("CLIENT_READY")
+            send_message("NEW_OBJECT||+" + dumps(obstacle))
         send_message(
             "NEW_OBJECT||+"
             + dumps(
