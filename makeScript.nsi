@@ -25,7 +25,7 @@ Section "Install"
     File /r "client"
 
     # Create a shortcut in the Windows Start Menu
-    CreateShortCut "$SMPROGRAMS\Slipstream Engine.lnk" "$INSTDIR\SlipstreamEngine.exe"
+    CreateShortCut "$SMPROGRAMS\Slipstream Engine.lnk" "$INSTDIR\launcher.bat"
 
     # Write the uninstaller to the installation directory
     WriteUninstaller "$INSTDIR\Uninstall Slipstream Engine.exe"
@@ -34,7 +34,7 @@ Section "Install"
     CreateShortCut "$SMPROGRAMS\Uninstall Slipstream Engine.lnk" "$INSTDIR\Uninstall Slipstream Engine.exe"
 
     # Wait for the executed program to finish before exiting
-    Exec '"$INSTDIR\SlipstreamEngine.exe"'
+    Exec '"$INSTDIR\launcher.bat"'
 
     # Exit the installer
     Quit
