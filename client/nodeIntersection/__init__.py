@@ -17,6 +17,7 @@ from panda3d.core import (
 )
 from time import sleep
 import numpy as np
+from direct.stdpy.threading import Thread
 
 collisionsVisible = False
 
@@ -425,7 +426,8 @@ class BaseActor:
     ):
         self.radius: float = radius
         self.position: tuple = position
-        self.sphere = create_uv_sphere(radius)
+        if mesh is not False or mesh is None:
+            self.sphere = create_uv_sphere(radius)
         self.mesh: GeomNode = mesh
         self.nodePath: NodePath = nodePath
         self.name: str = name
@@ -496,6 +498,8 @@ class Mgr:
         self.base_colliders: list[BaseCollider] = []
         self.complex_colliders: list[ComplexCollider] = []
         self.reportedCollisions: list[CollisionReport] = []
+
+        Thread(target=self._update_nearby, args=(80,)).start()
 
     def showCollisions(self):
         global collisionsVisible
@@ -599,6 +603,20 @@ class Mgr:
     def get_reported_collisions(self) -> list[CollisionReport]:
         return self.reportedCollisions
 
+    def _update_nearby(self, threshold=80):
+        """
+        Build a mapping of nearby base actors and colliders within a threshold distance.
+        """
+        while True:
+            self.nearby_actors = {actor: [] for actor in self.base_actors}
+            self.nearby_colliders = {collider: [] for collider in self.base_colliders}
+            for actor in self.base_actors:
+                for collider in self.base_colliders:
+                    if getTotalDistance(actor, collider) <= threshold:
+                        self.nearby_actors[actor].append(collider)
+                        self.nearby_colliders[collider].append(actor)
+                sleep(1 / 240)  # Sleep to avoid busy-waiting
+
     def update(self):
         del self.reportedCollisions[:]
         for actor in self.base_actors:
@@ -613,32 +631,32 @@ class Mgr:
                 if collider.nodePath is not None:
                     collider.position = collider.nodePath.getPos(base.render)  # type: ignore
                     collider.sphere.setPos(collider.position)
-                for actor in self.base_actors:
+                # Only check actors that are nearby
+                for actor in self.nearby_colliders.get(collider, []):
                     if actor.nodePath is not None:
                         actor.position = actor.nodePath.getPos(base.render)  # type: ignore
                         actor.sphere.setPos(actor.position)
-                    # Only check if within 75 units
+                    # Only check if within 75 units (already filtered by threshold)
                     if getTotalDistance(actor, collider) <= 75:
-                        for positionIndex in range(len(actor.position)):
-                            if (
-                                getTotalDistance(actor, collider)
-                                <= actor.radius + collider.radius
-                            ):
-                                colReport = CollisionReport(
-                                    actor,
-                                    collider,
-                                    actor.position,
-                                    collider.position,
-                                )
-                                self.reportedCollisions.append(colReport)
-                                if actor.collision_report is None:
-                                    actor.collision_report = [colReport]
-                                else:
-                                    actor.collision_report += [colReport]
-                                if collider.collision_report is None:
-                                    collider.collision_report = [colReport]
-                                else:
-                                    collider.collision_report += [colReport]
+                        if (
+                            getTotalDistance(actor, collider)
+                            <= actor.radius + collider.radius
+                        ):
+                            colReport = CollisionReport(
+                                actor,
+                                collider,
+                                actor.position,
+                                collider.position,
+                            )
+                            self.reportedCollisions.append(colReport)
+                            if actor.collision_report is None:
+                                actor.collision_report = [colReport]
+                            else:
+                                actor.collision_report += [colReport]
+                            if collider.collision_report is None:
+                                collider.collision_report = [colReport]
+                            else:
+                                collider.collision_report += [colReport]
         if len(self.complex_colliders) != 0:
             for actor in self.complex_actors:
                 for collider in self.complex_colliders:
