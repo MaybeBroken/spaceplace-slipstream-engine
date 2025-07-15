@@ -12,7 +12,8 @@ elif sys.platform == "darwin":
 appId = "SlipstreamEngine"
 if not os.path.exists(os.path.join(userAppData, appId)):
     os.makedirs(os.path.join(userAppData, appId))
-os.chdir(os.path.join(userAppData, appId))
+if not os.path.exists(".gitignore"): # disable library mode if in development directory
+    os.chdir(os.path.join(userAppData, appId))
 print("Current working directory:", os.path.abspath(os.getcwd()))
 
 atexit.register(
@@ -45,7 +46,7 @@ try:
             sys.exit(1)
 
     attempts = 0
-    while not is_python_installed and attempts < 12:
+    while not is_python_installed and attempts < 20:
         print("Waiting for Python to be installed...")
         is_python_installed = os.system("python3 --version") == 0
         sleep(5)
@@ -55,17 +56,20 @@ try:
         print("Python installation check exceeded maximum attempts. Exiting.")
         input("Press Enter to exit...")
         sys.exit(1)
-    if not os.path.exists("ver"):
-        print("Version file not found. Creating a new one.")
-        with open("ver", "w") as f:
-            f.write("0.0.0")
-    version = os.system(
-        f'python3 updater.py\
- --name "SlipstreamEngine"\
- --version {open("ver").read().strip()}\
- --file-index-path {os.path.abspath("remove_index.json")}\
- --root-path "."'
-    )
+    if not os.path.exists(".gitignore"): # disable update check if in development directory
+        if not os.path.exists("ver"):
+            print("Version file not found. Creating a new one.")
+            with open("ver", "w") as f:
+                f.write("0.0.0")
+        version = os.system(
+            f'python3 updater.py\
+    --name SlipstreamEngine\
+    --version {open("ver").read().strip()}\
+    --file-index-path {os.path.abspath("remove_index.json")}\
+    --root-path "."'
+        )
+    else:
+        print("Running in development mode, skipping update check.")
     os.system("python3 main.py")
 except:
     sleep(3)
