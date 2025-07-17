@@ -1,10 +1,14 @@
-from threading import Thread as Thread
+from multiprocessing import Process
+from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
 from panda3d.core import *
 from panda3d.core import loadPrcFileData
+import client.clientApp as clientApp
+import server.serverApp as serverApp
 import os
-import direct.stdpy.threading as threading
+import sys
+import traceback
 
 loadPrcFileData("", "win-size 350 150")
 loadPrcFileData("", "window-title Slipstream Launcher")
@@ -13,6 +17,9 @@ loadPrcFileData("", "load-display pandagl")
 loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
+
+WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(WORKING_DIR)
 
 
 class mainWindow(ShowBase):
@@ -40,17 +47,27 @@ class mainWindow(ShowBase):
 
     def launch_server(self):
         print("Launching server program...")
-        threading.Thread(target=os.system, args=("python server/serverApp.py",)).start()
+        Process(target=serverApp.run_server, args=()).start()
 
     def launch_client(self):
         print("Launching client program...")
-        threading.Thread(target=os.system, args=("python client/clientApp.py",)).start()
+        Process(target=clientApp.run_client, args=()).start()
 
     def quit(self):
         print("Exiting main program...")
         self.userExit()
 
 
+def main():
+    print("Slipstream Engine starting...")  # Console output for debugging
+    try:
+        app = mainWindow()
+        app.run()
+    except Exception as e:
+        print("An error occurred. See log file for details.")
+        sleep(2)
+        sys.exit(e.__traceback__)
+
+
 if __name__ == "__main__":
-    app = mainWindow()
-    app.run()
+    main()

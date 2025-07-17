@@ -7,7 +7,6 @@ from direct.gui.DirectGui import *
 from panda3d.core import *
 from screeninfo import get_monitors
 import mouse
-import sys
 import os
 from panda3d.core import (
     loadPrcFileData,
@@ -18,18 +17,19 @@ from panda3d.core import (
     Vec4,
 )
 import direct.stdpy.threading as threading
-from socketServer import (
+
+from .socketServer import (
     send_message,
     iter_messages,
     launch_server,
     register_disconnect_callback,
 )
-from thorium_api import Connection, asyncio
+from .thorium_api import Connection, asyncio
 import base64
 from PIL import Image
 from direct.interval.IntervalGlobal import *
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_current_monitor():
@@ -45,25 +45,19 @@ monitor_width = monitor.width
 monitor_height = monitor.height
 aspect_ratio = monitor_width / monitor_height
 
-loadPrcFileData("", "win-size 800 600")
-loadPrcFileData("", "window-title Slipstream Server")
-loadPrcFileData("", "load-display pandagl")
-loadPrcFileData("", "aux-display p3tinydisplay")
-loadPrcFileData("", "aux-display pandadx9")
-loadPrcFileData("", "aux-display pandadx8")
-loadPrcFileData("", f"win-fixed-size true")
-# loadPrcFileData("", f"want-pstats true")
 
 import requests
 
-if not os.path.exists("textures"):
-    os.makedirs("textures")
-if not os.path.exists("textures/apod.txt"):
-    with open("textures/apod.txt", "w") as f:
+if not os.path.exists(os.path.join(WORKING_DIR, "textures")):
+    os.makedirs(os.path.join(WORKING_DIR, "textures"))
+if not os.path.exists(os.path.join(WORKING_DIR, "textures", "apod.txt")):
+    with open(os.path.join(WORKING_DIR, "textures", "apod.txt"), "w") as f:
         f.write("NULL")
-with open("textures/apod.txt", "r") as f:
+with open(os.path.join(WORKING_DIR, "textures", "apod.txt"), "r") as f:
     last_date = f.read().strip()
-if last_date != date.today().isoformat() or not os.path.exists("textures/apod.jpg"):
+if last_date != date.today().isoformat() or not os.path.exists(
+    os.path.join(WORKING_DIR, "textures", "apod.jpg")
+):
 
     API_KEY = "DEMO_KEY"
     URL = f"https://api.nasa.gov/planetary/apod?api_key={API_KEY}"
@@ -87,10 +81,10 @@ if last_date != date.today().isoformat() or not os.path.exists("textures/apod.jp
 
     if APOD_data.get("media_type") == "image":
         image_url = APOD_data.get("hdurl") or APOD_data.get("url")
-        fetch_file(image_url, "textures/apod.jpg")
-        with open("textures/apod.txt", "w") as f:
+        fetch_file(image_url, os.path.join(WORKING_DIR, "textures", "apod.jpg"))
+        with open(os.path.join(WORKING_DIR, "textures", "apod.txt"), "w") as f:
             f.write(date.today().isoformat())
-        with open("textures/apod_info.txt", "w") as f:
+        with open(os.path.join(WORKING_DIR, "textures", "apod_info.txt"), "w") as f:
             f.write(APOD_data.get("title", ""))
             f.write("||+")
             f.write(APOD_data.get("explanation", ""))
@@ -103,8 +97,12 @@ class serverProgram(ShowBase):
         self.disableMouse()
         self.client_info = {"MONITOR_INDEX": 0}
         self.accept("q", self.quit)
-        self.taskMgr.add(self.client_loop, "client_loop")
-        self.thorium_connection = Connection()
+
+        def on_connect(api: Connection):
+            self.init_text.setText(f"waiting for client to connect...")
+            self.taskMgr.add(self.client_loop, "client_loop")
+
+        self.thorium_connection = Connection(on_connect=on_connect)
         self.base_object = {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0],
@@ -133,10 +131,14 @@ class serverProgram(ShowBase):
             },
         }
         self.savedClientData = self.base_config_data.copy()
-        if os.path.exists("textures/apod.jpg"):
-            image = Image.open("textures/apod.jpg")
+        if os.path.exists(os.path.join(WORKING_DIR, "textures", "apod.jpg")):
+            image = Image.open(
+                os.path.join(WORKING_DIR, "textures", "apod.jpg").replace("\\", "/")
+            )
             self.apod_image = OnscreenImage(
-                image="textures/apod.jpg",
+                image=os.path.join(WORKING_DIR, "textures", "apod.jpg")
+                .replace("\\", "/")
+                .replace("c:", "/c"),
                 pos=(0, -0.5, -0.1),
                 scale=(
                     1 * self.getAspectRatio(),
@@ -146,7 +148,7 @@ class serverProgram(ShowBase):
             )
             self.apod_image.setTransparency(TransparencyAttrib.MAlpha)
         self.init_text = OnscreenText(
-            text="Waiting for client to connect...",
+            text="Waiting for thorium to connect...",
             pos=(0, 0.45),
             scale=0.15,
             fg=(1, 1, 1, 1),
@@ -164,8 +166,8 @@ class serverProgram(ShowBase):
             align=TextNode.ACenter,
         )
         self.instruction_text.setTransparency(TransparencyAttrib.MAlpha)
-        if os.path.exists("textures/apod_info.txt"):
-            with open("textures/apod_info.txt", "r") as f:
+        if os.path.exists(os.path.join(WORKING_DIR, "textures", "apod_info.txt")):
+            with open(os.path.join(WORKING_DIR, "textures", "apod_info.txt"), "r") as f:
                 apod_info = f.read().split("||+")
             self.apod_title = OnscreenText(
                 text=apod_info[0],
@@ -176,8 +178,8 @@ class serverProgram(ShowBase):
                 align=TextNode.ARight,
             )
             self.apod_title.setTransparency(TransparencyAttrib.MAlpha)
-        if os.path.exists("textures/apod.txt"):
-            with open("textures/apod.txt", "r") as f:
+        if os.path.exists(os.path.join(WORKING_DIR, "textures", "apod.txt")):
+            with open(os.path.join(WORKING_DIR, "textures", "apod.txt"), "r") as f:
                 last_date = f.read().strip()
             self.apod_date = OnscreenText(
                 text=f"{last_date}",
@@ -190,6 +192,7 @@ class serverProgram(ShowBase):
             self.apod_date.setTransparency(TransparencyAttrib.MAlpha)
         self.mapNodes = []
         self.currentMapNodeCount = 0
+        self.ship_icon_scale = 1.0  # Default scale for ship icon
 
     def client_loop(self, task):
         for entry in iter_messages():
@@ -252,7 +255,6 @@ class serverProgram(ShowBase):
             newNode = self.shipMappingNode.copyTo(self.shipMappingNode.getParent())
             newNode.setColor(*ship_data["color"])
             newNode.setBin("fixed", 0)
-            newNode.setScale(0.1 / self.map.getScale()[0])
             self.shipMappingNode.removeNode()
             self.shipMappingNode = newNode
         return task.again
@@ -293,13 +295,13 @@ class serverProgram(ShowBase):
             self.savedClientData["OBJECTS"]["OBSTACLES"].append(data)
 
     def loadSavedConfig(self, name):
-        if not os.path.exists(f"config/{name}.dat"):
-            with open(f"config/{name}.dat", "wb") as f:
+        if not os.path.exists(os.path.join(WORKING_DIR, f"config", f"{name}.dat")):
+            with open(os.path.join(WORKING_DIR, "config", f"{name}.dat"), "wb") as f:
                 encoded = base64.b64encode(
                     dumps(self.base_config_data, indent=4).encode()
                 )
                 f.write(encoded)
-        with open(f"config/{name}.dat", "rb") as f:
+        with open(os.path.join(WORKING_DIR, "config", f"{name}.dat"), "rb") as f:
             config_data = f.read()
         ret = loads(base64.b32hexdecode(config_data))
         self.client_config(None, "set_monitor_" + str(ret["MONITOR_INDEX"]))
@@ -347,7 +349,7 @@ class serverProgram(ShowBase):
                 if not hasattr(self, "savedClientData")
                 else self.savedClientData.copy()
             )
-            with open(f"config/{name}.dat", "wb") as f:
+            with open(os.path.join(WORKING_DIR, "config", f"{name}.dat"), "wb") as f:
                 encoded = base64.b32hexencode(dumps(config_data, indent=4).encode())
                 f.write(encoded)
             print(f"Config saved as {name}.dat")
@@ -363,8 +365,8 @@ class serverProgram(ShowBase):
         )
 
     def runClientConfig(self, wsock):
-        if not os.path.exists("config"):
-            os.makedirs("config")
+        if not os.path.exists(os.path.join(WORKING_DIR, "config")):
+            os.makedirs(os.path.join(WORKING_DIR, "config"))
         if "MONITOR_CONFIG" not in self.client_info:
             self.taskMgr.doMethodLater(
                 0.1,
@@ -428,7 +430,7 @@ class serverProgram(ShowBase):
             items=["Load a saved config"]
             + [
                 f.split(os.path.sep)[-1].removesuffix(".dat")
-                for f in os.listdir("config")
+                for f in os.listdir(os.path.join(WORKING_DIR, "config"))
                 if f.endswith(".dat")
             ],
             command=lambda x: (
@@ -441,6 +443,7 @@ class serverProgram(ShowBase):
             pos=(0.6, 0, 0.9),
             command=lambda s: self.client_config(wsock, "set_seed_" + s),
         )
+        # Add slider for player icon scale
         self.accept("arrow_left", self.client_config, extraArgs=[wsock, "left"])
         self.accept("arrow_right", self.client_config, extraArgs=[wsock, "right"])
         self.client_config(
@@ -464,6 +467,18 @@ class serverProgram(ShowBase):
                 scale=0.000125,
             )
             self.cliMonitorObjects.append(node)
+
+    def setShipIconScale(self):
+        self.ship_icon_scale = self.shipIconScaleSlider.getValue()
+        if hasattr(self, "shipIconScaleLabel"):
+            self.shipIconScaleLabel.setText(
+                f"Player Icon Scale: {self.ship_icon_scale:.2f}"
+            )
+        # If ship icon already exists, update its scale
+        if hasattr(self, "shipMappingNode"):
+            self.shipMappingNode.setScale(
+                self.ship_icon_scale * 0.1 / self.map.getScale()[0]
+            )
 
     def generateGrid(self, grid_size=100, spacing=10):
         self.gridNode = self.render.attachNewNode("gridNode")
@@ -531,6 +546,22 @@ class serverProgram(ShowBase):
         self.generateGrid(100, 20 * 0.01)
         self.gridNode.reparentTo(self.mapObjectNode)
         self.gridNode.setP(90)
+        self.shipIconScaleSlider = DirectSlider(
+            range=(0.03, 20),
+            value=self.ship_icon_scale,
+            pageSize=0.01,
+            scale=0.5,
+            pos=(0, 0, 0.9),
+            command=self.setShipIconScale,
+        )
+        self.shipIconScaleLabel = OnscreenText(
+            text=f"Player Icon Scale: {self.ship_icon_scale:.2f}",
+            pos=(0, 0.875),
+            scale=0.05,
+            fg=(1, 1, 1, 1),
+            align=TextNode.ACenter,
+            mayChange=True,
+        )
         self.accept(
             "wheel_up",
             self.zoomIn,
@@ -714,7 +745,18 @@ class serverProgram(ShowBase):
         return task.cont
 
 
-if __name__ == "__main__":
-    app = serverProgram()
-    launch_server("localhost", 7050)
-    app.run()
+def run_server():
+    loadPrcFileData("", "win-size 800 600")
+    loadPrcFileData("", "window-title Slipstream Server")
+    loadPrcFileData("", "load-display pandagl")
+    loadPrcFileData("", "aux-display p3tinydisplay")
+    loadPrcFileData("", "aux-display pandadx9")
+    loadPrcFileData("", "aux-display pandadx8")
+    loadPrcFileData("", f"win-fixed-size true")
+    # loadPrcFileData("", f"want-pstats true")
+    try:
+        app = serverProgram()
+        launch_server("localhost", 7050)
+        app.run()
+    except Exception as e:
+        print(f"SERVER: Error running server: {e}")

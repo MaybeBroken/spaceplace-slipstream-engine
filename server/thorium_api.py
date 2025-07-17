@@ -14,24 +14,30 @@ async def ping_url(url):
             async with session.get(url) as resp:
                 if resp.status != 200:
                     print(f"Error: Unable to reach {url}, status code {resp.status}")
-                    sys.exit(1)
+                    return False
                 else:
                     print(f"Success: {url} is reachable, status code {resp.status}")
+                    return True
     except Exception as e:
         print(f"Error: Unable to reach {url} ({e})")
-        sys.exit(1)
+        return False
 
 
 class Connection:
-    def __init__(self, GRAPHQL_URL="http://localhost:4444/graphql"):
+    def __init__(self, GRAPHQL_URL="http://localhost:4444/graphql", on_connect=None):
+        self.on_connect = on_connect
         try:
-            threading.Thread(target=lambda: asyncio.run(self.async_connect(GRAPHQL_URL)), daemon=True).start()
+            threading.Thread(
+                target=lambda: asyncio.run(self.async_connect(GRAPHQL_URL)), daemon=True
+            ).start()
         except KeyboardInterrupt:
             print("Connection interrupted by user.")
             sys.exit(0)
 
     async def async_connect(self, GRAPHQL_URL):
-        await ping_url(GRAPHQL_URL)
+        while not await ping_url(GRAPHQL_URL):
+            await asyncio.sleep(2)
+
         transport = AIOHTTPTransport(url=GRAPHQL_URL)
         self.session = Client(
             transport=transport,
@@ -78,6 +84,8 @@ class Connection:
         result = await self.session.execute_async(getThrustersId)
         self.thrusterIds = [thruster["id"] for thruster in result["thrusters"]]
         print(f"Thruster IDs: {self.thrusterIds}")
+        if self.on_connect:
+            self.on_connect(self)
 
     async def async_set_thruster_rotation(self, yaw, pitch, roll):
         rotation_fields = []

@@ -5,5 +5,8 @@ websockets
 gql
 opensimplex
 pywin32
-numpy
-scipy
+Pillow
+requests
+aiohttp
+cryptography
+pep517

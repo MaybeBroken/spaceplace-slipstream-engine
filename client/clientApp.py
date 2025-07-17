@@ -5,7 +5,6 @@ from panda3d.core import *
 from screeninfo import get_monitors
 from direct.gui.DirectGui import *
 import mouse
-import sys
 import os
 from panda3d.core import (
     loadPrcFileData,
@@ -22,15 +21,13 @@ from panda3d.core import (
 from direct.filter.CommonFilters import CommonFilters
 import direct.stdpy.threading as threading
 import win32con
-import win32gui
-import win32api
-from win32controller import win32_WIN_Interface, win32_SYS_Interface
-from worldgen import WorldGen, WorldManager
+import win32.win32gui as win32gui
+import win32.win32api as win32api
+from .win32controller import win32_WIN_Interface, win32_SYS_Interface
+from .worldgen import WorldGen, WorldManager
 from direct.stdpy.threading import Thread
 import random
-from physics import physicsMgr
-
-import numpy as np
+from .physics import physicsMgr
 from scipy.stats import norm
 import math
 
@@ -44,26 +41,43 @@ def clamp(value, min_value, max_value):
         return value
 
 
-# Precompute the bell curve CDF at high resolution, but use vectorized numpy for fast mapping
-_x = np.linspace(0, 1, 10000)
-_pdf = norm.pdf(_x, loc=0.5, scale=0.15)
-_pdf /= _pdf.sum()
-_cdf = np.cumsum(_pdf)
+# Precompute the bell curve CDF at high resolution using pure Python for fast mapping
+_x = [i / 9999 for i in range(10000)]
+_pdf = [norm.pdf(x, loc=0.5, scale=0.15) for x in _x]
+pdf_sum = sum(_pdf)
+_pdf = [p / pdf_sum for p in _pdf]
+_cdf = []
+acc = 0.0
+for p in _pdf:
+    acc += p
+    _cdf.append(acc)
 
 
 def map_weights_to_range(obj_percent_list):
     total_weight = sum(weight for _, weight in obj_percent_list)
-    normalized_weights = np.array(
-        [weight / total_weight for _, weight in obj_percent_list]
-    )
+    normalized_weights = [weight / total_weight for _, weight in obj_percent_list]
 
     # Compute CDF boundaries for each object
-    cdf_bounds = np.concatenate(([0], np.cumsum(normalized_weights)))
+    cdf_bounds = [0]
+    acc = 0.0
+    for w in normalized_weights:
+        acc += w
+        cdf_bounds.append(acc)
+
     # Find indices in _cdf for all boundaries at once
-    idxs = np.searchsorted(_cdf, cdf_bounds)
-    idxs = np.clip(idxs, 0, len(_x) - 1)
-    # Map to x values
-    x_vals = _x[idxs]
+    def searchsorted(arr, val):
+        # Binary search for insertion index
+        lo, hi = 0, len(arr)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if arr[mid] < val:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo
+
+    idxs = [min(searchsorted(_cdf, b), len(_x) - 1) for b in cdf_bounds]
+    x_vals = [_x[i] for i in idxs]
 
     results = []
     for i, (obj, _) in enumerate(obj_percent_list):
@@ -72,7 +86,7 @@ def map_weights_to_range(obj_percent_list):
 
 
 # local imports
-from socketClient import (
+from .socketClient import (
     start_client,
     send_message,
     iter_messages,
@@ -80,7 +94,7 @@ from socketClient import (
     register_disconnect_callback,
 )
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_current_monitor():
@@ -95,21 +109,6 @@ monitor = get_monitors()[get_current_monitor()]
 monitor_width = monitor.width
 monitor_height = monitor.height - 49  # Leave some space for the taskbar
 aspect_ratio = monitor_width / monitor_height
-
-loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
-loadPrcFileData("", "window-title Slipstream Client")
-loadPrcFileData("", "undecorated true")
-# loadPrcFileData("", "show-frame-rate-meter true")
-# loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
-loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
-loadPrcFileData("", "background-color 0 0 0 0")
-loadPrcFileData("", "active-display-region true")
-loadPrcFileData("", "framebuffer-alpha true")
-loadPrcFileData("", "load-display pandagl")
-loadPrcFileData("", "aux-display p3tinydisplay")
-loadPrcFileData("", "aux-display pandadx9")
-loadPrcFileData("", "aux-display pandadx8")
-# loadPrcFileData("", f"want-pstats true")
 
 
 def generate_monitor_list():
@@ -242,23 +241,34 @@ class clientProgram(ShowBase):
         return task.cont
 
     def build_world(self):
-        # Placeholder for world-building logic
         self.alert.setText("CLIENT: Building world...")
         self.graphicsEngine.renderFrame()
         self.camLens.setNearFar(0.01, 20000)
         self.worldGrid = self.generateGrid(100, 20)
         self.boxModel = self.loader.loadModel("models/box")
-        self.circleModel = self.loader.loadModel("models/Circle/circle.bam")
+        self.circleModel = self.loader.loadModel(
+            os.path.join(WORKING_DIR, "models", "Circle", "circle.bam")
+            .replace("\\", "/")
+            .replace("c:", "/c")
+        )
         self.distanceShader = Shader.load(
             Shader.SL_GLSL,
-            "shaders/fade.vert",
-            "shaders/fade.frag",
+            os.path.join(WORKING_DIR, "shaders", "fade.vert")
+            .replace("\\", "/")
+            .replace("c:", "/c"),
+            os.path.join(WORKING_DIR, "shaders", "fade.frag")
+            .replace("\\", "/")
+            .replace("c:", "/c"),
         )
         self.circleModel.setShader(self.distanceShader)
         self.circleModel.setShaderInput("fadeDistance", 1)
         self.circleModel.setShaderInput("fadeColor", Vec4(1, 1, 1, 1))
         self.circleModel.setShaderInput("fadeCenter", Vec3(0, 0, 0))
-        self.voyager_model = self.loader.loadModel("models/Voyager/voyager.bam")
+        self.voyager_model = self.loader.loadModel(
+            os.path.join(WORKING_DIR, "models", "Voyager", "voyager.bam")
+            .replace("\\", "/")
+            .replace("c:", "/c")
+        )
         self.voyager_model.setScale(0.1)
         self.rootNode = self.render.attachNewNode("rootNode")
         self.voyager_model.reparentTo(self.rootNode)
@@ -268,7 +278,11 @@ class clientProgram(ShowBase):
             velocity=[0, 0, 0],
             velocityLimit=[0.5, 0.5, 0.5],
         )
-        self.engineRingNode = self.loader.loadModel("models/Ring/ring.bam")
+        self.engineRingNode = self.loader.loadModel(
+            os.path.join(WORKING_DIR, "models", "Ring", "ring.bam")
+            .replace("\\", "/")
+            .replace("c:", "/c")
+        )
         self.engineRingNode.reparentTo(self.voyager_model)
         self.engineRingNode.setScale(8)
         self.engineRingNode.setTransparency(TransparencyAttrib.MAlpha)
@@ -330,7 +344,6 @@ class clientProgram(ShowBase):
             WorldGen=self.worldGen,
             renderObject=self.rootNode,
             renderDistance=3,
-            scale_multiplier=1 / self.worldGen.VOX_SC,
         )
         self.renderedChunks = set()
         self.render.hide()
@@ -423,14 +436,14 @@ class clientProgram(ShowBase):
         rot_rad = math.radians(rotVal)
         x_component = math.cos(rot_rad)
         y_component = math.sin(rot_rad)
+        velocity = self.physicsMgr.getObjectVelocity(self.rootNode, "ship")
+        velocity_magnitude = math.sqrt(sum(v**2 for v in velocity))
         if strength > 0:
-            if tuple(self.physicsMgr.getObjectVelocity(self.rootNode, "ship")) <= (
-                0.001,
-                0.001,
-                0.001,
-            ):
+            if velocity_magnitude <= 0.001:
                 self.physicsMgr.setObjectVelocity(
-                    self.rootNode, "ship", [x_component, y_component, 0]
+                    self.rootNode,
+                    "ship",
+                    [x_component * strength * 0.01, y_component * strength * 0.01, 0],
                 )
             else:
                 self.physicsMgr.addVectorForce(
@@ -485,30 +498,33 @@ class clientProgram(ShowBase):
         for chunk in newChunks:
             xCoord, yCoord = chunk
             chunkData = self.worldGen.GENERATED_CHUNKS[chunk]
-            arr = np.array(chunkData)
-            xs = arr[:, 0]
-            ys = arr[:, 1]
-            points = arr[:, 2]
-            coords3D = np.stack(
-                [
-                    xCoord * self.worldGen.CHUNK_SIZE + xs,
-                    yCoord * self.worldGen.CHUNK_SIZE + ys,
-                    np.zeros_like(xs),
-                ],
-                axis=1,
-            )
-            pointIndices = (points + 1) / 2
 
-            coords3D_tuples = [tuple(coord) for coord in coords3D]
-            not_rendered_mask = [
-                tuple(coord) not in self.renderedChunks for coord in coords3D
+            # chunkData is a list of [x, y, point] triples
+            xs = [row[0] for row in chunkData]
+            ys = [row[1] for row in chunkData]
+            points = [row[2] for row in chunkData]
+
+            coords3D = [
+                (
+                    xCoord * self.worldGen.CHUNK_SIZE + xs[i],
+                    yCoord * self.worldGen.CHUNK_SIZE + ys[i],
+                    0,
+                )
+                for i in range(len(xs))
             ]
-            coords3D = coords3D[not_rendered_mask]
-            pointIndices = pointIndices[not_rendered_mask]
-            coords3D_tuples = [tuple(coord) for coord in coords3D]
+            pointIndices = [(p + 1) / 2 for p in points]
 
-            for i, coord3D in enumerate(coords3D):
-                pointIndex = pointIndices[i]
+            # Only render points not already rendered
+            not_rendered_mask = [coord not in self.renderedChunks for coord in coords3D]
+            coords3D_filtered = [
+                c for c, mask in zip(coords3D, not_rendered_mask) if mask
+            ]
+            pointIndices_filtered = [
+                p for p, mask in zip(pointIndices, not_rendered_mask) if mask
+            ]
+
+            for i, coord3D in enumerate(coords3D_filtered):
+                pointIndex = pointIndices_filtered[i]
                 for start, end, model in self.object_ranges:
                     if start <= pointIndex < end:
                         instance = model.copyTo(self.render)
@@ -518,7 +534,6 @@ class clientProgram(ShowBase):
                                 self.worldGen.get_noise_point(
                                     coord3D[0] * 100,
                                     coord3D[1] * 100,
-                                    0,
                                     self.worldGen.seed,
                                 )
                                 + 2
@@ -528,9 +543,7 @@ class clientProgram(ShowBase):
                         instancePos = Vec3(
                             (coord3D[0] * 25) + offset,
                             (coord3D[1] * 25) + coord3D[1] % offset / 20,
-                            random.uniform(
-                                -0.5, 0.5
-                            ),  # Increased Z offset to avoid z-fighting
+                            random.uniform(-0.5, 0.5),
                         )
                         instance.setPos(instancePos)
                         instance.setShaderInput("fadeCenter", instancePos)
@@ -560,7 +573,7 @@ class clientProgram(ShowBase):
                             )
                         )
                         break
-                self.renderedChunks.add(coords3D_tuples[i])
+                self.renderedChunks.add(coord3D)
             sleep(1 / 10)
 
         self.WorldManager.lastNewChunks = self.WorldManager.newChunks.copy()
@@ -693,7 +706,7 @@ class clientProgram(ShowBase):
         # Calculate heading (h) from x and y
         x = data[0]["x"]
         y = data[0]["y"]
-        heading = -np.degrees(np.arctan2(x, y))
+        heading = -math.degrees(math.atan2(x, y))
         self.engineRingNode.setH(heading + 180)
         self.engineRingNode.setColorScale(1, 1, 1, abs(x) + abs(y))
         # Clamp pitch to [0, 45] and [315, 360]
@@ -717,7 +730,21 @@ class clientProgram(ShowBase):
         )
 
 
-if __name__ == "__main__":
+def run_client():
+    loadPrcFileData("", "win-size " + str(monitor_width) + " " + str(monitor_height))
+    loadPrcFileData("", "window-title Slipstream Client")
+    loadPrcFileData("", "undecorated true")
+    # loadPrcFileData("", "show-frame-rate-meter true")
+    # loadPrcFileData("", "frame-rate-meter-update-interval 0.1")
+    loadPrcFileData("", f"win-origin {monitor.x} {monitor.y}")
+    loadPrcFileData("", "background-color 0 0 0 0")
+    loadPrcFileData("", "active-display-region true")
+    loadPrcFileData("", "framebuffer-alpha true")
+    loadPrcFileData("", "load-display pandagl")
+    loadPrcFileData("", "aux-display p3tinydisplay")
+    loadPrcFileData("", "aux-display pandadx9")
+    loadPrcFileData("", "aux-display pandadx8")
+    # loadPrcFileData("", f"want-pstats true")
     app = clientProgram()
     servers = search_servers(7050)
     for srv in servers:
