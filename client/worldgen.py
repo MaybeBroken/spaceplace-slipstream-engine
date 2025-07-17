@@ -82,8 +82,8 @@ class WorldGen:
     ):
         self.threshold = threshold
         self.GENERATED_CHUNKS: dict[tuple[int, int], list[tuple[int, int, float]]] = {}
-        self.CHUNK_SIZE = chunk_size  # Remove scaling by voxel_scale
-        self.VOX_SC = voxel_scale
+        self.CHUNK_SIZE = chunk_size  # Number of voxels per chunk
+        self.VOX_SC = voxel_scale  # Minimum distance between calculated positions
         self.NOISE_SCALE = noise_scale
         self.seed = seed if seed is not None else int(time() * 1000)
 
@@ -98,12 +98,14 @@ class WorldGen:
 
     def generate_chunk(self, x, y, threshold):
         chunk = []
-        # Use voxel_scale only for step size, not for scaling chunk size
-        for i in range(0, self.CHUNK_SIZE, self.VOX_SC):
-            for j in range(0, self.CHUNK_SIZE, self.VOX_SC):
-                noise = self.get_noise_point(
-                    (x * self.CHUNK_SIZE) + i, (y * self.CHUNK_SIZE) + j, self.seed
-                )
+        # Each chunk is CHUNK_SIZE x CHUNK_SIZE voxels, spaced by VOX_SC
+        chunk_origin_x = x * self.CHUNK_SIZE * self.VOX_SC
+        chunk_origin_y = y * self.CHUNK_SIZE * self.VOX_SC
+        for i in range(self.CHUNK_SIZE):
+            for j in range(self.CHUNK_SIZE):
+                world_x = chunk_origin_x + i * self.VOX_SC
+                world_y = chunk_origin_y + j * self.VOX_SC
+                noise = self.get_noise_point(world_x, world_y, self.seed)
                 if noise > threshold:
                     chunk.append((i, j, noise))
         return chunk
@@ -123,15 +125,12 @@ class WorldManager:
 
     def update(self):
         self.generatedChunks = 0
-        pos = (
-            self.renderObject.getPos()
-            / self.voxelScale
-            / self.WorldGen.CHUNK_SIZE
-            / self.WorldGen.VOX_SC
-        )
+        # Use the object's position in world units to determine the active chunk
+        pos = self.renderObject.getPos()
+        chunk_size_world = self.WorldGen.CHUNK_SIZE * self.WorldGen.VOX_SC
         activeChunk = [
-            int(pos[0] / self.WorldGen.CHUNK_SIZE),
-            int(pos[1] / self.WorldGen.CHUNK_SIZE),
+            int(pos[0] // chunk_size_world),
+            int(pos[1] // chunk_size_world),
         ]
         for x in range(
             activeChunk[0] - self.renderDistance,

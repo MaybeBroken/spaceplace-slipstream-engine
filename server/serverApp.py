@@ -84,7 +84,11 @@ if last_date != date.today().isoformat() or not os.path.exists(
         fetch_file(image_url, os.path.join(WORKING_DIR, "textures", "apod.jpg"))
         with open(os.path.join(WORKING_DIR, "textures", "apod.txt"), "w") as f:
             f.write(date.today().isoformat())
-        with open(os.path.join(WORKING_DIR, "textures", "apod_info.txt"), "w") as f:
+        with open(
+            os.path.join(WORKING_DIR, "textures", "apod_info.txt"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(APOD_data.get("title", ""))
             f.write("||+")
             f.write(APOD_data.get("explanation", ""))

@@ -192,7 +192,7 @@ class clientProgram(ShowBase):
         self.worldGen = WorldGen(
             threshold=-1,
             chunk_size=6,
-            voxel_scale=1,
+            voxel_scale=32,
             noise_scale=1,
             seed=0,
         )
@@ -499,15 +499,17 @@ class clientProgram(ShowBase):
             xCoord, yCoord = chunk
             chunkData = self.worldGen.GENERATED_CHUNKS[chunk]
 
-            # chunkData is a list of [x, y, point] triples
             xs = [row[0] for row in chunkData]
             ys = [row[1] for row in chunkData]
             points = [row[2] for row in chunkData]
 
+            # Calculate world positions using voxel scale
+            chunk_origin_x = xCoord * self.worldGen.CHUNK_SIZE * self.worldGen.VOX_SC
+            chunk_origin_y = yCoord * self.worldGen.CHUNK_SIZE * self.worldGen.VOX_SC
             coords3D = [
                 (
-                    xCoord * self.worldGen.CHUNK_SIZE + xs[i],
-                    yCoord * self.worldGen.CHUNK_SIZE + ys[i],
+                    chunk_origin_x + xs[i] * self.worldGen.VOX_SC,
+                    chunk_origin_y + ys[i] * self.worldGen.VOX_SC,
                     0,
                 )
                 for i in range(len(xs))
@@ -541,8 +543,8 @@ class clientProgram(ShowBase):
                             * 50
                         )
                         instancePos = Vec3(
-                            (coord3D[0] * 25) + offset,
-                            (coord3D[1] * 25) + coord3D[1] % offset / 20,
+                            coord3D[0] + offset,
+                            coord3D[1] + coord3D[1] % offset / 20,
                             random.uniform(-0.5, 0.5),
                         )
                         instance.setPos(instancePos)
