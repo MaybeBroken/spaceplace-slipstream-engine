@@ -6,7 +6,7 @@ setuptools.setup(
     author="David Sponseller",
     author_email="davidsponseller123@gmail.com",
     description="Slipstream Engine for The Space Place at Renaissance Academy",
-    long_description="This is the Slipstream Engine, a game engine for The Space Place at Renaissance Academy.",
+    long_description="This is the Slipstream Engine, a spaceflight engine for The Space Place at Renaissance Academy.",
     long_description_content_type="text/plain",
     url="https://github.com/MaybeBroken/spaceplace-slipstream-engine",
     classifiers=[
@@ -21,10 +21,15 @@ setuptools.setup(
             },
             "log_filename": "$USER_APPDATA/SlipstreamEngine/output.log",
             "log_append": False,
+            "log_filename_strftime": True,
             "include_patterns": [
                 "client/**",
                 "server/**",
-                "pywin32_system32/**",
+            ],
+            "exclude_patterns": [
+                "**/*.py",
+                "**/__pycache__/**",
+                "**/*.blend*",
             ],
             "plugins": [
                 "pandagl",
@@ -34,18 +39,16 @@ setuptools.setup(
                 "pandadx8",
             ],
             "include_modules": [
-                "client.clientApp",
-                "client.socketClient",
-                "client.win32controller",
-                "client.worldgen",
-                "client.physics",
-                "server.serverApp",
-                "server.socketServer",
-                "server.thorium_api",
+                "client.*"
+                "server.*",
                 "win32.*.*",
+                "urllib",
+                "asyncio",
+                "asyncio.*",
             ],
             "package_data_dirs": {
                 "win32": [("pywin32_system32/*", "", {}), ("win32/*.pyd", "", {})],
+                "asyncio": [("asyncio/*", "", {}), ("asyncio/base_events/*", "", {})],
             },
             "prefer_discrete_gpu": True,
             "platforms": ["win_amd64"],

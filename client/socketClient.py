@@ -118,13 +118,25 @@ def get_arp_ips():
     arp_ips.add(socket.gethostbyname(socket.gethostname()))  # Add local IP
     arp_ips.add("localhost")  # Add localhost for good measure
     try:
-        output = subprocess.check_output("arp -a", shell=True, encoding="utf-8")
-        # Regex for IPv4 addresses
-        ip_pattern = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3})")
-        for line in output.splitlines():
-            match = ip_pattern.search(line)
-            if match:
-                arp_ips.add(match.group(1))
+        # Check if 'arp' command is available
+        if (
+            subprocess.call(
+                "arp -a",
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            == 0
+        ):
+            output = subprocess.check_output("arp -a", shell=True, encoding="utf-8")
+            # Regex for IPv4 addresses
+            ip_pattern = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3})")
+            for line in output.splitlines():
+                match = ip_pattern.search(line)
+                if match:
+                    arp_ips.add(match.group(1))
+        else:
+            print("ARP command not available on this system.")
     except Exception as e:
         print(f"Error reading ARP table: {e}")
     return list(arp_ips)

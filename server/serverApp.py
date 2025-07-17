@@ -28,6 +28,12 @@ from .thorium_api import Connection, asyncio
 import base64
 from PIL import Image
 from direct.interval.IntervalGlobal import *
+import json
+import sys
+
+if not "__file__" in globals():
+    __file__ = os.path.abspath(sys.argv[0])
+
 
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -45,8 +51,8 @@ monitor_width = monitor.width
 monitor_height = monitor.height
 aspect_ratio = monitor_width / monitor_height
 
-
-import requests
+import urllib.request
+import urllib.error
 
 if not os.path.exists(os.path.join(WORKING_DIR, "textures")):
     os.makedirs(os.path.join(WORKING_DIR, "textures"))
@@ -62,19 +68,19 @@ if last_date != date.today().isoformat() or not os.path.exists(
     API_KEY = "DEMO_KEY"
     URL = f"https://api.nasa.gov/planetary/apod?api_key={API_KEY}"
 
-    APOD_response = requests.get(URL)
-    APOD_data: dict = APOD_response.json()
+    try:
+        with urllib.request.urlopen(URL) as response:
+            APOD_data = json.loads(response.read().decode())
+    except urllib.error.URLError as e:
+        print(f"Error fetching APOD data: {e}")
+        APOD_data = {}
 
     def fetch_file(url: str, local_path: str) -> None:
-
         try:
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            with requests.get(url, stream=True) as response:
-                response.raise_for_status()  # Raise an error for bad responses
-                with open(local_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-        except requests.RequestException as e:
+            with urllib.request.urlopen(url) as response, open(local_path, "wb") as f:
+                f.write(response.read())
+        except urllib.error.URLError as e:
             print(f"Error downloading file {url}: {e}")
         except Exception as e:
             print(f"Error saving file {url} at {local_path}: {e}")
@@ -93,6 +99,8 @@ if last_date != date.today().isoformat() or not os.path.exists(
             f.write("||+")
             f.write(APOD_data.get("explanation", ""))
 
+print("APOD data fetched and saved.")
+
 
 class serverProgram(ShowBase):
     def __init__(self, *args, **kwargs):
@@ -106,6 +114,7 @@ class serverProgram(ShowBase):
             self.init_text.setText(f"waiting for client to connect...")
             self.taskMgr.add(self.client_loop, "client_loop")
 
+        print("Initializing Thorium connection...")
         self.thorium_connection = Connection(on_connect=on_connect)
         self.base_object = {
             "position": [0, 0, 0],
@@ -136,13 +145,12 @@ class serverProgram(ShowBase):
         }
         self.savedClientData = self.base_config_data.copy()
         if os.path.exists(os.path.join(WORKING_DIR, "textures", "apod.jpg")):
-            image = Image.open(
-                os.path.join(WORKING_DIR, "textures", "apod.jpg").replace("\\", "/")
+            apod_path = os.path.join(WORKING_DIR, "textures", "apod.jpg").replace(
+                "\\", "/"
             )
+            image = Image.open(apod_path)
             self.apod_image = OnscreenImage(
-                image=os.path.join(WORKING_DIR, "textures", "apod.jpg")
-                .replace("\\", "/")
-                .replace("c:", "/c"),
+                image=apod_path.replace("c:", "/c").replace("C:", "/c"),
                 pos=(0, -0.5, -0.1),
                 scale=(
                     1 * self.getAspectRatio(),

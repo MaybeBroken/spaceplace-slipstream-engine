@@ -23,14 +23,13 @@ import direct.stdpy.threading as threading
 import win32con
 import win32.win32gui as win32gui
 import win32.win32api as win32api
-from .win32controller import win32_WIN_Interface, win32_SYS_Interface
+from .win32controller import win32_WIN_Interface
 from .worldgen import WorldGen, WorldManager
 from direct.stdpy.threading import Thread
 import random
 from .physics import physicsMgr
-from scipy.stats import norm
 import math
-
+import sys
 
 def clamp(value, min_value, max_value):
     if value <= min_value:
@@ -42,8 +41,16 @@ def clamp(value, min_value, max_value):
 
 
 # Precompute the bell curve CDF at high resolution using pure Python for fast mapping
+
+
+def normal_pdf(x, mu=0.5, sigma=0.15):
+    return math.exp(-((x - mu) ** 2) / (2 * sigma**2)) / (
+        sigma * math.sqrt(2 * math.pi)
+    )
+
+
 _x = [i / 9999 for i in range(10000)]
-_pdf = [norm.pdf(x, loc=0.5, scale=0.15) for x in _x]
+_pdf = [normal_pdf(x) for x in _x]
 pdf_sum = sum(_pdf)
 _pdf = [p / pdf_sum for p in _pdf]
 _cdf = []
@@ -93,6 +100,9 @@ from .socketClient import (
     search_servers,
     register_disconnect_callback,
 )
+
+if not "__file__" in globals():
+    __file__ = os.path.abspath(sys.argv[0])
 
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 

@@ -9,6 +9,13 @@ import server.serverApp as serverApp
 import os
 import sys
 import traceback
+import subprocess
+import asyncio.base_events
+import asyncio.tasks
+import asyncio.streams
+import asyncio.events
+import asyncio.subprocess
+
 
 loadPrcFileData("", "win-size 350 150")
 loadPrcFileData("", "window-title Slipstream Launcher")
@@ -18,7 +25,11 @@ loadPrcFileData("", "aux-display p3tinydisplay")
 loadPrcFileData("", "aux-display pandadx9")
 loadPrcFileData("", "aux-display pandadx8")
 
+if not "__file__" in globals():
+    __file__ = os.path.abspath(sys.argv[0])
+
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
+
 os.chdir(WORKING_DIR)
 
 
@@ -47,11 +58,11 @@ class mainWindow(ShowBase):
 
     def launch_server(self):
         print("Launching server program...")
-        Process(target=serverApp.run_server, args=()).start()
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--server"])
 
     def launch_client(self):
         print("Launching client program...")
-        Process(target=clientApp.run_client, args=()).start()
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--client"])
 
     def quit(self):
         print("Exiting main program...")
@@ -69,5 +80,30 @@ def main():
         sys.exit(e.__traceback__)
 
 
+def run_server():
+    serverApp.run_server()
+
+
+def run_client():
+    clientApp.run_client()
+
+
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Slipstream Engine Launcher")
+    parser.add_argument("--server", action="store_true", help="Launch server only")
+    parser.add_argument("--client", action="store_true", help="Launch client only")
+    # Use parse_known_args to ignore unknown arguments (e.g., from multiprocessing)
+    args, unknown = parser.parse_known_args()
+    return args
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    if args.server:
+        run_server()
+    elif args.client:
+        run_client()
+    else:
+        main()
