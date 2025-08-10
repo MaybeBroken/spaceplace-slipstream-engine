@@ -1,4 +1,3 @@
-from multiprocessing import Process
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
@@ -8,13 +7,7 @@ import client.clientApp as clientApp
 import server.serverApp as serverApp
 import os
 import sys
-import traceback
 import subprocess
-import asyncio.base_events
-import asyncio.tasks
-import asyncio.streams
-import asyncio.events
-import asyncio.subprocess
 
 
 loadPrcFileData("", "win-size 350 150")

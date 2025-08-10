@@ -31,6 +31,7 @@ from .physics import physicsMgr
 import math
 import sys
 
+
 def clamp(value, min_value, max_value):
     if value <= min_value:
         return min_value
