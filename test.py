@@ -16,6 +16,7 @@ class mainWindow(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
         self.set_background_color(0, 0, 0, 1)
+        import asyncio
 
 
 root = mainWindow()

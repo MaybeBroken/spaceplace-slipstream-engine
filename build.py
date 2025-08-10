@@ -22,7 +22,6 @@ if MODE == "setuptools":
                 "include_patterns": [
                     "client/**",
                     "server/**",
-                    "asyncio/**",
                 ],
                 "exclude_patterns": [
                     "**/*.py",
@@ -41,15 +40,6 @@ if MODE == "setuptools":
                     "server.*",
                     "win32.*.*",
                     "urllib",
-                    "asyncio",
-                    "asyncio.base_events",
-                    "asyncio.events",
-                    "asyncio.runners",
-                    "asyncio.selector_events",
-                    "asyncio.windows_events",
-                    "asyncio.windows_utils",
-                    "selectors",
-                    "concurrent.futures",
                 ],
                 "package_data_dirs": {
                     "win32": [("pywin32_system32/*", "", {}), ("win32/*.pyd", "", {})],
