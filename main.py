@@ -1,13 +1,20 @@
+print("INIT")
 from time import sleep
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.DirectGui import *
 from panda3d.core import *
 from panda3d.core import loadPrcFileData
+
+print("beginning client imports")
 import client.clientApp as clientApp
+
+print("beginning server imports")
 import server.serverApp as serverApp
 import os
 import sys
 import subprocess
+
+print("finished imports")
 
 
 loadPrcFileData("", "win-size 350 150")
@@ -24,6 +31,8 @@ if not "__file__" in globals():
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 
 os.chdir(WORKING_DIR)
+
+print("Changed working directory to:", WORKING_DIR)
 
 
 class mainWindow(ShowBase):
