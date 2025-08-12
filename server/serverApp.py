@@ -115,7 +115,6 @@ class serverProgram(ShowBase):
             self.taskMgr.add(self.client_loop, "client_loop")
 
         print("Initializing Thorium connection...")
-        self.thorium_connection = Connection(on_connect=on_connect)
         self.base_object = {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0],
@@ -205,6 +204,7 @@ class serverProgram(ShowBase):
         self.mapNodes = []
         self.currentMapNodeCount = 0
         self.ship_icon_scale = 1.0  # Default scale for ship icon
+        self.thorium_connection = Connection(on_connect=on_connect)
 
     def client_loop(self, task):
         for entry in iter_messages():

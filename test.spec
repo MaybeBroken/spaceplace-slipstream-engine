@@ -1,22 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_data_files
 
-datas = [('client', 'client'), ('server', 'server'), ('C:\\Users\\david\\AppData\\Roaming\\Python\\Python313\\site-packages\\panda3d\\etc', 'etc')]
-binaries = [('C:\\Users\\david\\AppData\\Roaming\\Python\\Python313\\site-packages\\panda3d\\libpandagl.dll', '.'), ('C:\\Users\\david\\AppData\\Roaming\\Python\\Python313\\site-packages\\panda3d\\libpandadx9.dll', '.'), ('C:\\Users\\david\\AppData\\Roaming\\Python\\Python313\\site-packages\\panda3d\\libp3tinydisplay.dll', '.')]
-hiddenimports = ['panda3d', 'panda3d.core']
-tmp_ret = collect_all('panda3d')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+datas = []
+datas += collect_data_files('panda3d')
 
 
 a = Analysis(
     ['test.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['pyi_rth_panda3d_pluginpath.py'],
+    runtime_hooks=[],
     excludes=[],
     noarchive=False,
     optimize=0,
@@ -42,4 +39,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    contents_directory='.',
 )
