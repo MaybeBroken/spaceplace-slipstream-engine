@@ -445,8 +445,8 @@ class clientProgram(ShowBase):
         strength = self.engineRingNode.getColorScale()[3]
         # Get x and y components from rotVal (assuming rotVal is in degrees)
         rot_rad = math.radians(rotVal)
-        x_component = math.cos(rot_rad)
-        y_component = math.sin(rot_rad)
+        x_component = math.sin(rot_rad)
+        y_component = -math.cos(rot_rad)
         velocity = self.physicsMgr.getObjectVelocity(self.rootNode, "ship")
         velocity_magnitude = math.sqrt(sum(v**2 for v in velocity))
         if strength > 0:
