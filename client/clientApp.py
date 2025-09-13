@@ -31,6 +31,11 @@ from .physics import physicsMgr
 import math
 import sys
 
+# TODO: Add grid movement, snapping, and scaling. Add ability to toggle grid visibility?
+# TODO: Implement object pooling for obstacle models
+# TODO: add target objects
+# TODO: Add slipstream physics
+
 
 def clamp(value, min_value, max_value):
     if value <= min_value:
