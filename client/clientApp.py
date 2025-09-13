@@ -142,6 +142,7 @@ class clientProgram(ShowBase):
         self.setBackgroundColor(0, 0, 0)
         self.backfaceCullingOn()
         self.render.set_antialias(AntialiasAttrib.MAuto)
+        self.render.setShaderAuto()
         self.physicsMgr = physicsMgr()
         self.physicsMgr.enable(drag=0.0003, gravity=(0, 0, 0))
         register_disconnect_callback(lambda: os.kill(os.getpid(), 9))
@@ -255,7 +256,7 @@ class clientProgram(ShowBase):
         self.alert.setText("CLIENT: Building world...")
         self.graphicsEngine.renderFrame()
         self.camLens.setNearFar(0.01, 20000)
-        self.worldGrid = self.generateGrid(100, 20)
+        self.worldGrid = self.generateGrid(100, 0.2)
         self.boxModel = self.loader.loadModel("models/box")
         self.circleModel = self.loader.loadModel(
             os.path.join(WORKING_DIR, "models", "Circle", "circle.bam")
@@ -449,6 +450,15 @@ class clientProgram(ShowBase):
         y_component = -math.cos(rot_rad)
         velocity = self.physicsMgr.getObjectVelocity(self.rootNode, "ship")
         velocity_magnitude = math.sqrt(sum(v**2 for v in velocity))
+        ship_rotation = self.camera_joint.getH() % 360
+        x_component_rotated = x_component * math.cos(math.radians(ship_rotation)) - (
+            y_component * math.sin(math.radians(ship_rotation))
+        )
+        y_component_rotated = (y_component * math.cos(math.radians(ship_rotation))) + (
+            x_component * math.sin(math.radians(ship_rotation))
+        )
+        x_component = x_component_rotated
+        y_component = y_component_rotated
         if strength > 0:
             if velocity_magnitude <= 0.001:
                 self.physicsMgr.setObjectVelocity(
@@ -491,8 +501,10 @@ class clientProgram(ShowBase):
         instance.setPos(position)
         instance.setHpr(rotation)
         instance.setShaderInput("fadeCenter", position)
-        instance.setShaderInput("fadeDistance", instance.getScale(self.render)[0])
+        instance.setColor(Vec4(0, 0, 0, 0))
         instance.setTransparency(TransparencyAttrib.MAlpha)
+        instance.setBin("transparent", 0)
+        instance.setDepthWrite(False)
         data["size"] = list(instance.getScale(self.render))
         data["position"] = list(position)
         data["rotation"] = list(rotation)
@@ -559,8 +571,11 @@ class clientProgram(ShowBase):
                             random.uniform(-0.5, 0.5),
                         )
                         instance.setPos(instancePos)
+                        instance.setColor(Vec4(0, 0, 0, 0))
                         instance.setShaderInput("fadeCenter", instancePos)
                         instance.setTransparency(TransparencyAttrib.MAlpha)
+                        instance.setBin("transparent", 0)
+                        instance.setDepthWrite(False)
 
                         send_message(
                             "NEW_OBJECT||+"
@@ -616,6 +631,9 @@ class clientProgram(ShowBase):
             self.gridNode.attachNewNode(node)
 
         self.gridNode.setTransparency(TransparencyAttrib.MAlpha)
+        self.gridNode.setBin("background", 0)
+        self.gridNode.setDepthWrite(False)
+        self.gridNode.setColorScale(0, 1, 0.2, 0.4)
         return self.gridNode
 
     def runConfig(self, config):
