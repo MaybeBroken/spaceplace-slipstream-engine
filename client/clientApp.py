@@ -266,16 +266,16 @@ class clientProgram(ShowBase):
         self.circleModel = self.loader.loadModel(
             os.path.join(WORKING_DIR, "models", "Circle", "circle.bam")
             .replace("\\", "/")
-            .replace("c:", "/c")
+            .replace("C:", "/c")
         )
         self.distanceShader = Shader.load(
             Shader.SL_GLSL,
             os.path.join(WORKING_DIR, "shaders", "fade.vert")
             .replace("\\", "/")
-            .replace("c:", "/c"),
+            .replace("C:", "/c"),
             os.path.join(WORKING_DIR, "shaders", "fade.frag")
             .replace("\\", "/")
-            .replace("c:", "/c"),
+            .replace("C:", "/c"),
         )
         self.circleModel.setShader(self.distanceShader)
         self.circleModel.setShaderInput("fadeDistance", 1)
@@ -284,7 +284,7 @@ class clientProgram(ShowBase):
         self.voyager_model = self.loader.loadModel(
             os.path.join(WORKING_DIR, "models", "Voyager", "voyager.bam")
             .replace("\\", "/")
-            .replace("c:", "/c")
+            .replace("C:", "/c")
         )
         self.voyager_model.setScale(0.1)
         self.rootNode = self.render.attachNewNode("rootNode")
@@ -298,7 +298,7 @@ class clientProgram(ShowBase):
         self.engineRingNode = self.loader.loadModel(
             os.path.join(WORKING_DIR, "models", "Ring", "ring.bam")
             .replace("\\", "/")
-            .replace("c:", "/c")
+            .replace("C:", "/c")
         )
         self.engineRingNode.reparentTo(self.voyager_model)
         self.engineRingNode.setScale(8)
