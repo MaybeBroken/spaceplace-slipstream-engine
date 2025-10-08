@@ -30,12 +30,14 @@ from PIL import Image
 from direct.interval.IntervalGlobal import *
 import json
 import sys
+from pathlib import Path
 
 if not "__file__" in globals():
     __file__ = os.path.abspath(sys.argv[0])
 
 
-WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
+root_dir = Path(os.path.expanduser("~"))
+WORKING_DIR = root_dir / "Slipstream Engine" / "server"
 
 
 def get_current_monitor():

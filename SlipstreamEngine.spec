@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
 
-datas = [('client', 'client'), ('server', 'server'), ('client/models', './models'), ('client/shaders', './shaders')]
+datas = [('client', 'client'), ('server', 'server'), ('bin_data.bin', '.')]
 datas += collect_data_files('panda3d')
 
 

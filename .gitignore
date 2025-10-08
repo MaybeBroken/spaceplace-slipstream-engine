@@ -3,3 +3,4 @@ builds/
 __pycache__/
 build/
 dist/
+bin_data.bin

@@ -1,4 +1,5 @@
 from json import dumps, loads
+from pathlib import Path
 from time import sleep, time
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import *
@@ -107,10 +108,9 @@ from .socketClient import (
     register_disconnect_callback,
 )
 
-if not "__file__" in globals():
-    __file__ = os.path.abspath(sys.argv[0])
 
-WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
+root_dir = Path(os.path.expanduser("~"))
+WORKING_DIR = root_dir / "Slipstream Engine" / "client"
 
 
 def get_current_monitor():
